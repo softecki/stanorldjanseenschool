@@ -1,0 +1,11 @@
+export { ExaminationHomePage } from './Examination/pages/ExaminationHomePage';
+export { MarksGradesListPage } from './Examination/pages/MarksGradesListPage';
+export { MarksGradesFormPage } from './Examination/pages/MarksGradesFormPage';
+export { ExaminationSettingsPage } from './Examination/pages/ExaminationSettingsPage';
+export { ExamAssignListPage } from './Examination/pages/ExamAssignListPage';
+export { ExamAssignCreatePage } from './Examination/pages/ExamAssignCreatePage';
+export { ExamAssignEditPage } from './Examination/pages/ExamAssignEditPage';
+export { MarksRegisterListPage } from './Examination/pages/MarksRegisterListPage';
+export { MarksRegisterCreatePage } from './Examination/pages/MarksRegisterCreatePage';
+export { MarksRegisterViewPage } from './Examination/pages/MarksRegisterViewPage';
+export { MarksRegisterEditPage } from './Examination/pages/MarksRegisterEditPage';

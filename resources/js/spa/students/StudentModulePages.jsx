@@ -1,0 +1,11 @@
+export { StudentCreatePage } from './pages/StudentCreatePage';
+export { StudentUploadPage } from './pages/StudentUploadPage';
+export { StudentShowPage } from './pages/StudentShowPage';
+export { StudentEditPage } from './pages/StudentEditPage';
+export { StudentCategoriesPage } from './pages/StudentCategoriesPage';
+export { StudentCategoryFormPage } from './pages/StudentCategoryFormPage';
+export { ParentsPage } from './pages/ParentsPage';
+export { ParentFormPage } from './pages/ParentFormPage';
+export { PromoteStudentsIndexPage } from './pages/PromoteStudentsIndexPage';
+export { PromoteStudentsCreatePage } from './pages/PromoteStudentsCreatePage';
+export { DisabledStudentsPage } from './pages/DisabledStudentsPage';

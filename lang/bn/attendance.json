@@ -1,0 +1,10 @@
+{
+    "Attendance": "উপস্থিতি",
+    "Note": "মন্তব্য",
+    "Holiday": "ছুটি",
+    "Present": "উপস্থিত",
+    "Late": "দেরি",
+    "Absent": "অনুপস্থিত",
+    "half_day": "অর্ধেক দিন",
+    "attendance_already_collected_you_can_edit_record": "উপস্থিতি ইতিমধ্যে সংগ্রহ করা হয়েছে, আপনি রেকর্ড সম্পাদনা করতে পারেন"
+}

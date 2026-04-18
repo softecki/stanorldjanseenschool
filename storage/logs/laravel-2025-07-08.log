@@ -1,0 +1,398 @@
+[2025-07-08 05:35:12] production.INFO: array (
+  'fees_assign_children' => 
+  \Illuminate\Database\Eloquent\Collection::__set_state(array(
+     'items' => 
+    array (
+      0 => 
+      \App\Models\Fees\FeesAssignChildren::__set_state(array(
+         'connection' => 'mysql',
+         'table' => 'fees_assign_childrens',
+         'primaryKey' => 'id',
+         'keyType' => 'int',
+         'incrementing' => true,
+         'with' => 
+        array (
+        ),
+         'withCount' => 
+        array (
+        ),
+         'preventsLazyLoading' => false,
+         'perPage' => 15,
+         'exists' => true,
+         'wasRecentlyCreated' => false,
+         'escapeWhenCastingToString' => false,
+         'attributes' => 
+        array (
+          'id' => 435,
+          'fees_assign_id' => 28,
+          'fees_master_id' => 3,
+          'student_id' => 419,
+          'control_number' => '00818920',
+          'fees_amount' => '1000000',
+          'paid_amount' => '215000',
+          'remained_amount' => '785000',
+          'quater_amount' => '250000',
+          'quater_one' => 35000,
+          'quater_two' => 250000,
+          'quater_three' => 250000,
+          'quater_four' => 250000,
+          'comment' => NULL,
+          'outstandingbalance' => '0',
+          'fee_group' => 1,
+          'created_at' => '2025-06-23 18:17:25',
+          'updated_at' => '2025-06-23 18:17:25',
+          'updated' => 0,
+          'fees_collect_count' => 0,
+        ),
+         'original' => 
+        array (
+          'id' => 435,
+          'fees_assign_id' => 28,
+          'fees_master_id' => 3,
+          'student_id' => 419,
+          'control_number' => '00818920',
+          'fees_amount' => '1000000',
+          'paid_amount' => '215000',
+          'remained_amount' => '785000',
+          'quater_amount' => '250000',
+          'quater_one' => 35000,
+          'quater_two' => 250000,
+          'quater_three' => 250000,
+          'quater_four' => 250000,
+          'comment' => NULL,
+          'outstandingbalance' => '0',
+          'fee_group' => 1,
+          'created_at' => '2025-06-23 18:17:25',
+          'updated_at' => '2025-06-23 18:17:25',
+          'updated' => 0,
+          'fees_collect_count' => 0,
+        ),
+         'changes' => 
+        array (
+        ),
+         'casts' => 
+        array (
+        ),
+         'classCastCache' => 
+        array (
+        ),
+         'attributeCastCache' => 
+        array (
+        ),
+         'dates' => 
+        array (
+        ),
+         'dateFormat' => NULL,
+         'appends' => 
+        array (
+        ),
+         'dispatchesEvents' => 
+        array (
+        ),
+         'observables' => 
+        array (
+        ),
+         'relations' => 
+        array (
+          'feesCollect' => NULL,
+        ),
+         'touches' => 
+        array (
+        ),
+         'timestamps' => true,
+         'hidden' => 
+        array (
+        ),
+         'visible' => 
+        array (
+        ),
+         'fillable' => 
+        array (
+        ),
+         'guarded' => 
+        array (
+          0 => '*',
+        ),
+      )),
+    ),
+     'escapeWhenCastingToString' => false,
+  )),
+  'account_number' => 
+  \Illuminate\Database\Eloquent\Collection::__set_state(array(
+     'items' => 
+    array (
+      0 => 
+      \App\Models\BankAccounts::__set_state(array(
+         'connection' => 'mysql',
+         'table' => 'bank_accounts',
+         'primaryKey' => 'id',
+         'keyType' => 'int',
+         'incrementing' => true,
+         'with' => 
+        array (
+        ),
+         'withCount' => 
+        array (
+        ),
+         'preventsLazyLoading' => false,
+         'perPage' => 15,
+         'exists' => true,
+         'wasRecentlyCreated' => false,
+         'escapeWhenCastingToString' => false,
+         'attributes' => 
+        array (
+          'id' => 1,
+          'bank_name' => 'CRDB',
+          'account_name' => 'CRDB - NARIVA HILL SCHOOL FEES',
+          'account_number' => '015C514012300',
+          'account_type' => NULL,
+          'status' => '1',
+          'created_at' => '2024-11-09 11:41:01',
+          'updated_at' => '2024-11-09 11:41:01',
+        ),
+         'original' => 
+        array (
+          'id' => 1,
+          'bank_name' => 'CRDB',
+          'account_name' => 'CRDB - NARIVA HILL SCHOOL FEES',
+          'account_number' => '015C514012300',
+          'account_type' => NULL,
+          'status' => '1',
+          'created_at' => '2024-11-09 11:41:01',
+          'updated_at' => '2024-11-09 11:41:01',
+        ),
+         'changes' => 
+        array (
+        ),
+         'casts' => 
+        array (
+        ),
+         'classCastCache' => 
+        array (
+        ),
+         'attributeCastCache' => 
+        array (
+        ),
+         'dates' => 
+        array (
+        ),
+         'dateFormat' => NULL,
+         'appends' => 
+        array (
+        ),
+         'dispatchesEvents' => 
+        array (
+        ),
+         'observables' => 
+        array (
+        ),
+         'relations' => 
+        array (
+        ),
+         'touches' => 
+        array (
+        ),
+         'timestamps' => true,
+         'hidden' => 
+        array (
+        ),
+         'visible' => 
+        array (
+        ),
+         'fillable' => 
+        array (
+        ),
+         'guarded' => 
+        array (
+          0 => '*',
+        ),
+      )),
+      1 => 
+      \App\Models\BankAccounts::__set_state(array(
+         'connection' => 'mysql',
+         'table' => 'bank_accounts',
+         'primaryKey' => 'id',
+         'keyType' => 'int',
+         'incrementing' => true,
+         'with' => 
+        array (
+        ),
+         'withCount' => 
+        array (
+        ),
+         'preventsLazyLoading' => false,
+         'perPage' => 15,
+         'exists' => true,
+         'wasRecentlyCreated' => false,
+         'escapeWhenCastingToString' => false,
+         'attributes' => 
+        array (
+          'id' => 2,
+          'bank_name' => 'CRDB',
+          'account_name' => 'CRDB - NARIVA HILL SCHOOL TRANSPORT',
+          'account_number' => '015C514012301',
+          'account_type' => NULL,
+          'status' => '1',
+          'created_at' => '2024-11-09 11:42:13',
+          'updated_at' => '2024-11-09 11:42:13',
+        ),
+         'original' => 
+        array (
+          'id' => 2,
+          'bank_name' => 'CRDB',
+          'account_name' => 'CRDB - NARIVA HILL SCHOOL TRANSPORT',
+          'account_number' => '015C514012301',
+          'account_type' => NULL,
+          'status' => '1',
+          'created_at' => '2024-11-09 11:42:13',
+          'updated_at' => '2024-11-09 11:42:13',
+        ),
+         'changes' => 
+        array (
+        ),
+         'casts' => 
+        array (
+        ),
+         'classCastCache' => 
+        array (
+        ),
+         'attributeCastCache' => 
+        array (
+        ),
+         'dates' => 
+        array (
+        ),
+         'dateFormat' => NULL,
+         'appends' => 
+        array (
+        ),
+         'dispatchesEvents' => 
+        array (
+        ),
+         'observables' => 
+        array (
+        ),
+         'relations' => 
+        array (
+        ),
+         'touches' => 
+        array (
+        ),
+         'timestamps' => true,
+         'hidden' => 
+        array (
+        ),
+         'visible' => 
+        array (
+        ),
+         'fillable' => 
+        array (
+        ),
+         'guarded' => 
+        array (
+          0 => '*',
+        ),
+      )),
+      2 => 
+      \App\Models\BankAccounts::__set_state(array(
+         'connection' => 'mysql',
+         'table' => 'bank_accounts',
+         'primaryKey' => 'id',
+         'keyType' => 'int',
+         'incrementing' => true,
+         'with' => 
+        array (
+        ),
+         'withCount' => 
+        array (
+        ),
+         'preventsLazyLoading' => false,
+         'perPage' => 15,
+         'exists' => true,
+         'wasRecentlyCreated' => false,
+         'escapeWhenCastingToString' => false,
+         'attributes' => 
+        array (
+          'id' => 5,
+          'bank_name' => 'Cash',
+          'account_name' => 'CASH',
+          'account_number' => '[CASH]',
+          'account_type' => NULL,
+          'status' => '1',
+          'created_at' => NULL,
+          'updated_at' => NULL,
+        ),
+         'original' => 
+        array (
+          'id' => 5,
+          'bank_name' => 'Cash',
+          'account_name' => 'CASH',
+          'account_number' => '[CASH]',
+          'account_type' => NULL,
+          'status' => '1',
+          'created_at' => NULL,
+          'updated_at' => NULL,
+        ),
+         'changes' => 
+        array (
+        ),
+         'casts' => 
+        array (
+        ),
+         'classCastCache' => 
+        array (
+        ),
+         'attributeCastCache' => 
+        array (
+        ),
+         'dates' => 
+        array (
+        ),
+         'dateFormat' => NULL,
+         'appends' => 
+        array (
+        ),
+         'dispatchesEvents' => 
+        array (
+        ),
+         'observables' => 
+        array (
+        ),
+         'relations' => 
+        array (
+        ),
+         'touches' => 
+        array (
+        ),
+         'timestamps' => true,
+         'hidden' => 
+        array (
+        ),
+         'visible' => 
+        array (
+        ),
+         'fillable' => 
+        array (
+        ),
+         'guarded' => 
+        array (
+          0 => '*',
+        ),
+      )),
+    ),
+     'escapeWhenCastingToString' => false,
+  )),
+  'student_id' => '419',
+)  
+[2025-07-08 05:35:28] production.INFO: amounts 100000  
+[2025-07-08 05:35:28] production.INFO: amountamount...... 100000  
+[2025-07-08 05:35:28] production.INFO: amountamount...... 1100000  
+[2025-07-08 05:35:28] production.INFO: feeIds......32..435  
+[2025-07-08 05:35:28] production.INFO: quarterAmount......32..35000  
+[2025-07-08 05:35:28] production.INFO: feeIds......32..435  
+[2025-07-08 05:35:28] production.INFO: quarterAmount......32..250000  
+[2025-07-08 08:08:04] production.INFO: {"id":3,"session_id":8,"classes_id":5,"status":1,"created_at":"2025-01-14T18:01:20.000000Z","updated_at":"2025-01-14T18:01:20.000000Z"}  
+[2025-07-08 08:09:35] production.INFO: {"id":4,"session_id":8,"classes_id":6,"status":1,"created_at":"2025-01-14T18:01:20.000000Z","updated_at":"2025-01-14T18:01:20.000000Z"}  
+[2025-07-08 08:09:35] production.INFO: [{"section_id":4,"section":{"id":4,"name":"PINEAPPLE","status":1,"created_at":"2024-11-28T15:02:48.000000Z","updated_at":"2025-06-07T01:19:34.000000Z","section_tran":"PINEAPPLE"}},{"section_id":5,"section":{"id":5,"name":"ORANGE","status":1,"created_at":"2024-11-28T15:02:48.000000Z","updated_at":"2025-06-07T01:20:00.000000Z","section_tran":"ORANGE"}},{"section_id":8,"section":{"id":8,"name":"E","status":1,"created_at":"2025-04-30T14:07:46.000000Z","updated_at":"2025-04-30T14:07:46.000000Z","section_tran":"E"}},{"section_id":6,"section":{"id":6,"name":"GRAPES","status":1,"created_at":"2024-11-28T15:02:48.000000Z","updated_at":"2025-06-07T01:20:25.000000Z","section_tran":"GRAPES"}},{"section_id":7,"section":{"id":7,"name":"D","status":1,"created_at":"2025-04-30T14:07:42.000000Z","updated_at":"2025-04-30T14:07:42.000000Z","section_tran":"D"}},{"section_id":9,"section":{"id":9,"name":"F","status":1,"created_at":"2025-04-30T14:07:50.000000Z","updated_at":"2025-04-30T14:07:50.000000Z","section_tran":"F"}},{"section_id":14,"section":null},{"section_id":21,"section":null},{"section_id":33,"section":null},{"section_id":40,"section":null},{"section_id":66,"section":null},{"section_id":111,"section":null},{"section_id":115,"section":null},{"section_id":130,"section":null},{"section_id":138,"section":null},{"section_id":141,"section":null},{"section_id":143,"section":null},{"section_id":159,"section":null},{"section_id":163,"section":null},{"section_id":184,"section":{"id":184,"name":"AMERICA","status":1,"created_at":"2025-06-07T12:40:34.000000Z","updated_at":"2025-06-07T12:40:34.000000Z","section_tran":"AMERICA"}},{"section_id":185,"section":{"id":185,"name":"PACIFIC","status":1,"created_at":"2025-06-07T12:40:48.000000Z","updated_at":"2025-06-07T12:40:48.000000Z","section_tran":"PACIFIC"}},{"section_id":186,"section":{"id":186,"name":"INDIAN","status":1,"created_at":"2025-06-07T12:40:59.000000Z","updated_at":"2025-06-07T12:40:59.000000Z","section_tran":"INDIAN"}},{"section_id":187,"section":{"id":187,"name":"ATLANTIC","status":1,"created_at":"2025-06-07T12:41:10.000000Z","updated_at":"2025-06-07T12:41:10.000000Z","section_tran":"ATLANTIC"}},{"section_id":188,"section":{"id":188,"name":"EUROPE","status":1,"created_at":"2025-06-07T12:41:22.000000Z","updated_at":"2025-06-07T12:41:22.000000Z","section_tran":"EUROPE"}},{"section_id":189,"section":{"id":189,"name":"EVAREST (LANGOI)","status":1,"created_at":"2025-06-07T12:41:32.000000Z","updated_at":"2025-06-07T12:41:32.000000Z","section_tran":"EVAREST (LANGOI)"}}]  
+[2025-07-08 08:19:54] production.INFO: {"id":8,"session_id":8,"classes_id":7,"status":1,"created_at":"2025-01-14T18:01:22.000000Z","updated_at":"2025-01-14T18:01:22.000000Z"}  
+[2025-07-08 08:19:54] production.INFO: [{"section_id":5,"section":{"id":5,"name":"ORANGE","status":1,"created_at":"2024-11-28T15:02:48.000000Z","updated_at":"2025-06-07T01:20:00.000000Z","section_tran":"ORANGE"}},{"section_id":4,"section":{"id":4,"name":"PINEAPPLE","status":1,"created_at":"2024-11-28T15:02:48.000000Z","updated_at":"2025-06-07T01:19:34.000000Z","section_tran":"PINEAPPLE"}},{"section_id":6,"section":{"id":6,"name":"GRAPES","status":1,"created_at":"2024-11-28T15:02:48.000000Z","updated_at":"2025-06-07T01:20:25.000000Z","section_tran":"GRAPES"}},{"section_id":7,"section":{"id":7,"name":"D","status":1,"created_at":"2025-04-30T14:07:42.000000Z","updated_at":"2025-04-30T14:07:42.000000Z","section_tran":"D"}},{"section_id":8,"section":{"id":8,"name":"E","status":1,"created_at":"2025-04-30T14:07:46.000000Z","updated_at":"2025-04-30T14:07:46.000000Z","section_tran":"E"}},{"section_id":9,"section":{"id":9,"name":"F","status":1,"created_at":"2025-04-30T14:07:50.000000Z","updated_at":"2025-04-30T14:07:50.000000Z","section_tran":"F"}},{"section_id":190,"section":{"id":190,"name":"LONDON","status":1,"created_at":"2025-06-07T12:51:36.000000Z","updated_at":"2025-06-07T12:51:36.000000Z","section_tran":"LONDON"}},{"section_id":191,"section":{"id":191,"name":"SHISHILA","status":1,"created_at":"2025-06-07T12:51:43.000000Z","updated_at":"2025-06-07T12:51:43.000000Z","section_tran":"SHISHILA"}},{"section_id":192,"section":{"id":192,"name":"MAMBYA","status":1,"created_at":"2025-06-07T12:51:52.000000Z","updated_at":"2025-06-07T12:51:52.000000Z","section_tran":"MAMBYA"}},{"section_id":193,"section":{"id":193,"name":"PARIS","status":1,"created_at":"2025-06-07T12:52:00.000000Z","updated_at":"2025-06-07T12:52:00.000000Z","section_tran":"PARIS"}},{"section_id":194,"section":{"id":194,"name":"LAGOS","status":1,"created_at":"2025-06-07T12:52:08.000000Z","updated_at":"2025-06-07T12:52:08.000000Z","section_tran":"LAGOS"}},{"section_id":195,"section":{"id":195,"name":"MOSCOW","status":1,"created_at":"2025-06-07T12:52:17.000000Z","updated_at":"2025-06-07T12:52:17.000000Z","section_tran":"MOSCOW"}}]  

@@ -1,0 +1,22 @@
+{
+    "code": "কোড",
+    "publisher_name": "প্রকাশকের নাম",
+    "author_name": "লেখকের নাম",
+    "rack_no": "র্যাক নম্বর",
+    "price": "মূল্য",
+    "quantity": "পরিমাণ",
+    "select_book": "বই নির্বাচন করুন",
+    "select_member": "সদস্য নির্বাচন করুন",
+    "issue_date": "ইস্যু তারিখ",
+    "return_date": "ফেরত দিনের তারিখ",
+    "Select category": "বিভাগ নির্বাচন করুন",
+    "category": "বিভাগ",
+    "enter_code": "কোড লিখুন",
+    "enter_publisher_name": "প্রকাশকের নাম লিখুন",
+    "enter_author_name": "লেখকের নাম লিখুন",
+    "enter_rack_no": "র্যাক নম্বর লিখুন",
+    "enter_price": "মূল্য লিখুন",
+    "enter_quantity": "পরিমাণ লিখুন",
+    "description": "বর্ণনা",
+    "enter_phone_no": "ফোন নম্বর লিখুন"
+}

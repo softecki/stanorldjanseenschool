@@ -1,0 +1,118 @@
+📁 NALOPA SCHOOL - IMAGE FOLDER STRUCTURE
+===========================================
+
+public/frontend/img/
+│
+├── 📁 sliders/ (Hero Carousel Images - 1920x1080px)
+│   ├── african-students-classroom-learning.webp
+│   ├── african-students-school-campus.webp
+│   └── african-students-graduation-success.webp
+│
+├── 📁 accreditation/ (Vision & Mission Images - 800x800px)
+│   └── african-students-reading-library.webp
+│
+├── 📁 banner/ (Background Images - 1920x700px)
+│   ├── african-students-school-building.webp
+│   ├── african-students-school-assembly.webp
+│   └── african-students-school-entrance.webp
+│
+├── 📁 explore/ (Explore Section Images - 800x600px)
+│   └── african-students-campus-activities.webp
+│
+├── 📁 about-gallery/ (About Page Images - 800x500px)
+│   ├── african-students-modern-campus-facilities.webp
+│   ├── african-students-science-laboratory.webp
+│   ├── african-students-graduation-ceremony.webp
+│   ├── icon-campus-tour.svg
+│   ├── icon-academic-excellence.svg
+│   └── icon-alumni-success.svg
+│
+└── 📁 icon/ (Icon Files - SVG Format)
+    ├── icon-academic-book.svg
+    ├── icon-student-growth.svg
+    └── icon-modern-school.svg
+
+===========================================
+TOTAL FILES NEEDED: 17
+- Images: 11 WebP files
+- Icons: 6 SVG files
+===========================================
+
+IMAGE DESCRIPTIONS:
+===========================================
+
+SLIDERS (Homepage Hero Section):
+1. african-students-classroom-learning.webp
+   → Students in uniform, actively learning, bright classroom
+   
+2. african-students-school-campus.webp
+   → Wide campus shot, students walking, modern building
+   
+3. african-students-graduation-success.webp
+   → Graduation ceremony, caps in air, joyful students
+
+ACCREDITATION (Vision/Mission):
+4. african-students-reading-library.webp
+   → Students reading books in library, focused, uniforms
+
+BANNERS (Background Images):
+5. african-students-school-building.webp
+   → School building exterior, students in foreground
+   
+6. african-students-school-assembly.webp
+   → Large group at assembly, organized rows, uniforms
+   
+7. african-students-school-entrance.webp
+   → School entrance, students entering/leaving
+
+EXPLORE:
+8. african-students-campus-activities.webp
+   → Mix of academic and sports activities on campus
+
+ABOUT GALLERY:
+9. african-students-modern-campus-facilities.webp
+   → Students in modern corridor/facilities
+   
+10. african-students-science-laboratory.webp
+    → Students in lab coats, conducting experiments
+    
+11. african-students-graduation-ceremony.webp
+    → Graduation moment, receiving certificates
+
+ICONS (SVG - Optional, can use existing):
+12-17. Various educational icons
+    → Can be simple, professional, school-themed
+
+===========================================
+UPLOAD INSTRUCTIONS:
+===========================================
+
+1. Create folders if they don't exist:
+   - public/frontend/img/sliders/
+   - public/frontend/img/accreditation/
+   - public/frontend/img/banner/
+   - public/frontend/img/explore/
+   - public/frontend/img/about-gallery/
+   - public/frontend/img/icon/
+
+2. Upload images with EXACT file names shown above
+
+3. Clear cache:
+   php artisan config:clear
+
+4. Refresh website
+
+===========================================
+IMAGE REQUIREMENTS:
+===========================================
+
+✓ Format: WebP for images, SVG for icons
+✓ Quality: High (80-90%)
+✓ Style: Professional, bright, clean
+✓ Uniforms: White shirts, ties, dark pants/skirts
+✓ Settings: Modern African English medium school
+✓ Subjects: Smart, engaged African students
+✓ Mood: Positive, confident, educational
+
+===========================================
+

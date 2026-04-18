@@ -1,0 +1,22 @@
+{
+    "Key": "কি",
+    "edit_sections": "সেকশন সম্পাদনা করুন",
+    "create_slider": "স্লাইডার তৈরি করুন",
+    "edit_slider": "স্লাইডার সম্পাদনা করুন",
+    "create_about": "তথ্য তৈরি করুন",
+    "edit_about": "তথ্য সম্পাদনা করুন",
+    "create_counter": "কাউন্টার তৈরি করুন",
+    "edit_counter": "কাউন্টার সম্পাদনা করুন",
+    "create_contact_information": "যোগাযোগ তথ্য তৈরি করুন",
+    "edit_contact_information": "যোগাযোগ তথ্য সম্পাদনা করুন",
+    "create_department_contact": "বিভাগ যোগাযোগ তৈরি করুন",
+    "edit_department_contact": "বিভাগ যোগাযোগ সম্পাদনা করুন",
+    "create_news": "নিউজ তৈরি করুন",
+    "edit_news": "নিউজ সম্পাদনা করুন",
+    "create_event": "ইভেন্ট তৈরি করুন",
+    "edit_event": "ইভেন্ট সম্পাদনা করুন",
+    "create_gallery_category": "গ্যালারি ক্যাটাগরি তৈরি করুন",
+    "edit_gallery_category": "গ্যালারি ক্যাটাগরি সম্পাদনা করুন",
+    "create_gallery": "গ্যালারি তৈরি করুন",
+    "edit_gallery": "গ্যালারি সম্পাদনা করুন"
+}

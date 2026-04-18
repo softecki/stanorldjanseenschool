@@ -1,0 +1,14 @@
+{
+    "400_database_connection_error": "400 Database connection error",
+    "please_check_database_connection_and_tables": "Please check your database connection and tables",
+    "back_to_homepage": "Back to homepage",
+    "reset_database": "Reset database",
+    "403_forbidden": "403 Forbidden",
+    "you_re_trying_to_open_in_your_web_browser_is_a_resource_that_you_re_not_allowed_to_access": "You are trying to open in your web browser is a resource that you re not allowed to allowed to access",
+    "404_page_not_found": "404 Page Not Found",
+    "you_were_trying_to_reach_couldn_t_be_found_on_the_server": "You were trying to reach couldn't be found on the server",
+    "405_method_not_allowed": "405 Method Not Allowed",
+    "the_server_knows_the_request_method_but_the_target_resource_doesn_t_support_this_method": "The server knows the requested method but the target resource doesn't support this method",
+    "500_something_wrong": "500 Something Wrong",
+    "we_are_trying_to_fix_the_problem_as_soon_as_possible": "We are trying to fix the problem as soon as possible"
+}

@@ -1,0 +1,10 @@
+export { DepositsPage } from './extraPages/DepositsPage';
+export { DepositFormPage } from './extraPages/DepositFormPage';
+export { PaymentsPage } from './extraPages/PaymentsPage';
+export { PaymentFormPage } from './extraPages/PaymentFormPage';
+export { TransactionsPage } from './extraPages/TransactionsPage';
+export { TransactionFormPage } from './extraPages/TransactionFormPage';
+export { SuppliersPage } from './extraPages/SuppliersPage';
+export { SupplierFormPage } from './extraPages/SupplierFormPage';
+export { InvoicesPage } from './extraPages/InvoicesPage';
+export { InvoiceFormPage } from './extraPages/InvoiceFormPage';

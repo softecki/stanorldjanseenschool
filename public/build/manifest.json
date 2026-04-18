@@ -1,0 +1,53 @@
+{
+  "resources/js/app.js": {
+    "file": "assets/app.a76e644f.js",
+    "src": "resources/js/app.js",
+    "isEntry": true,
+    "imports": [
+      "_bootstrap.15ef6daa.js"
+    ],
+    "css": [
+      "assets/app.ac60dbf9.css"
+    ]
+  },
+  "resources/js/legacy-app.js": {
+    "file": "assets/legacy-app.c99438ef.js",
+    "src": "resources/js/legacy-app.js",
+    "isEntry": true,
+    "imports": [
+      "_bootstrap.15ef6daa.js"
+    ]
+  },
+  "resources/js/spa/main.jsx": {
+    "file": "assets/main.0b078e70.js",
+    "src": "resources/js/spa/main.jsx",
+    "isEntry": true,
+    "imports": [
+      "_bootstrap.15ef6daa.js"
+    ],
+    "css": [
+      "assets/main.ddb1fab7.css"
+    ]
+  },
+  "_bootstrap.15ef6daa.js": {
+    "file": "assets/bootstrap.15ef6daa.js"
+  },
+  "resources/css/legacy.css": {
+    "file": "assets/legacy.0898c3b1.css",
+    "src": "resources/css/legacy.css",
+    "isEntry": true
+  },
+  "resources/css/spa.css": {
+    "file": "assets/spa.ddb1fab7.css",
+    "src": "resources/css/spa.css",
+    "isEntry": true
+  },
+  "resources/js/spa/main.css": {
+    "file": "assets/main.ddb1fab7.css",
+    "src": "resources/js/spa/main.css"
+  },
+  "resources/js/app.css": {
+    "file": "assets/app.ac60dbf9.css",
+    "src": "resources/js/app.css"
+  }
+}
