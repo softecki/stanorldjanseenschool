@@ -20,7 +20,10 @@ class AccountRepository implements AccountInterface
 
     public function search($request)
     {
-         Log::info($request->dates);
+        $startDateFormatted = null;
+        $endDateFormatted = null;
+
+        Log::info($request->dates);
       if ($request->type == AccountHeadType::INCOME) {
             $result = Income::where('session_id', setting('session'));
 
@@ -43,8 +46,8 @@ class AccountRepository implements AccountInterface
         if($request->dates != ""){
             if (!empty($request->dates) ) {
                 [$startDate, $endDate] = explode(' - ', $request->dates);
-        $startDateFormatted = date('Y-m-d', strtotime($startDate));
-        $endDateFormatted   = date('Y-m-d', strtotime($endDate));
+                $startDateFormatted = date('Y-m-d', strtotime($startDate));
+                $endDateFormatted   = date('Y-m-d', strtotime($endDate));
                 $result = $result->whereBetween('date', [
                     $startDateFormatted ,
                     $endDateFormatted ,
@@ -53,12 +56,12 @@ class AccountRepository implements AccountInterface
         }
 
 
-        $data['sum']    = $result->sum('amount');
-            $data['cash'] = (clone $result)->where('account_number', '=', '5')->sum('amount');
-$data['bank'] = (clone $result)->where('account_number', '!=', '5')->sum('amount');
-       $data['start_date'] =  $startDateFormatted;
+        $data['sum']    = (clone $result)->sum('amount');
+        $data['cash'] = (clone $result)->where('account_number', '=', '5')->sum('amount');
+        $data['bank'] = (clone $result)->where('account_number', '!=', '5')->sum('amount');
+        $data['start_date'] =  $startDateFormatted;
         $data['end_date'] =  $endDateFormatted;
-        $data['result'] = $result->paginate(20);
+        $data['result'] = $result->with('head')->latest()->paginate(20);
         
         return $data;
     }
@@ -66,6 +69,8 @@ $data['bank'] = (clone $result)->where('account_number', '!=', '5')->sum('amount
     public function searchPDF($request)
 {
     $isIncome = $request->type == AccountHeadType::INCOME;
+    $startDateFormatted = null;
+    $endDateFormatted = null;
 
     // Base query
     $query = $isIncome ? Income::query() : Expense::query();
@@ -89,7 +94,7 @@ $data['bank'] = (clone $result)->where('account_number', '!=', '5')->sum('amount
     }
 
     // Clone the query before modifying for cash/bank breakdown
-    $results = $query->get();
+    $results = $query->with('head')->latest()->get();
 
     $data['result'] = $results;
     $data['report'] = $query = $isIncome ? 'INCOME ': 'EXPENSES '; 

@@ -14,6 +14,8 @@ class StudentDeletedHistory extends Model
 
     protected $guarded = [];
 
+    protected $appends = ['full_name'];
+
     protected $casts = [
         'deleted_at' => 'datetime',
     ];

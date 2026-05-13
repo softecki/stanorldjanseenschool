@@ -27,14 +27,22 @@ class ParentGuardianController extends Controller
             return response()->json(['data' => $data['parents'], 'meta' => ['title' => $data['title']]]);
         }
 
-        return redirect()->to(url('/app/parents'));
+        return redirect()->to(spa_url('parents'));
     }
 
     public function search(Request $request)
     {
-        $data['title']   = ___('student_info.parent_list');
+        $data['title']    = ___('student_info.parent_list');
         $data['request'] = $request;
-        $data['parents'] = $this->repo->searchParent($request);
+        $data['parents']  = $this->repo->searchParent($request);
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'data' => $data['parents'],
+                'meta' => ['title' => $data['title']],
+            ]);
+        }
+
         return view('backend.student-info.parent.index', compact('data'));
     }
 
@@ -45,7 +53,7 @@ class ParentGuardianController extends Controller
             return response()->json(['meta' => ['title' => $data['title']]]);
         }
 
-        return redirect()->to(url('/app/parents/create'));
+        return redirect()->to(spa_url('parents/create'));
     }
 
     public function getParent(Request $request)
@@ -77,22 +85,47 @@ class ParentGuardianController extends Controller
             return response()->json(['data' => $data['parent'], 'meta' => ['title' => $data['title']]]);
         }
 
-        return redirect()->to(url('/app/parents/'.$id.'/edit'));
+        return redirect()->to(spa_url('parents/'.$id.'/edit'));
+    }
+
+    public function show(Request $request, $id): JsonResponse|RedirectResponse
+    {
+        $parent = $this->repo->show($id);
+        if ($parent === null) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Parent not found.'], 404);
+            }
+
+            return redirect()->to(spa_url('parents'))->with('danger', 'Parent not found.');
+        }
+
+        $parent->load('user');
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'data' => $parent,
+                'meta' => ['title' => ___('student_info.parent_list')],
+            ]);
+        }
+
+        return redirect()->to(spa_url('parents/'.$id));
     }
 
     public function update(ParentGuardianUpdateRequest $request, $id): JsonResponse|RedirectResponse
     {
         $result = $this->repo->update($request, $id);
-        if($result){
+        if ($result['status'] ?? false) {
             if ($request->expectsJson()) {
                 return response()->json(['message' => $result['message']]);
             }
+
             return redirect()->route('parent.index')->with('success', $result['message']);
         }
         if ($request->expectsJson()) {
-            return response()->json(['message' => $result['message']], 422);
+            return response()->json(['message' => $result['message'] ?? 'Update failed.'], 422);
         }
-        return back()->with('danger', $result['message']);
+
+        return back()->with('danger', $result['message'] ?? 'Update failed.');
     }
 
     public function delete($id)

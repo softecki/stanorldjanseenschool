@@ -215,6 +215,7 @@ class FrontendRepository implements FrontendInterface
             $row->email          = $request->email;
             $row->session_id     = $request->session;
             $row->classes_id     = $request->class;
+            $row->section_id     = $request->section ?: null;
             $row->dob            = $request->dob;
             $row->gender_id      = $request->gender;
             $row->religion_id    = $request->religion;

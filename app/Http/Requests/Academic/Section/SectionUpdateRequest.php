@@ -23,8 +23,10 @@ class SectionUpdateRequest extends FormRequest
      */
     public function rules()
     {
+        $id = $this->route('id');
+
         return [
-            'name'   => 'required|max:255|unique:sections,name,'.Request()->id,
+            'name'   => 'required|max:255|unique:sections,name,'.$id,
             'status' => 'required'
         ];
     }

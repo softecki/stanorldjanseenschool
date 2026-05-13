@@ -37,10 +37,28 @@ class ParentGuardianRepository implements ParentGuardianInterface
 
     public function searchParent($request)
     {
-        return $this->model::where('guardian_name', 'LIKE', "%{$request->keyword}%")
-        ->orWhere('guardian_email', 'LIKE', "%{$request->keyword}%")
-        ->orWhere('guardian_mobile', 'LIKE', "%{$request->keyword}%")
-        ->paginate(Settings::PAGINATE);
+        $keyword = trim((string) $request->input('keyword', ''));
+        $q = $this->model::query()->latest();
+        if ($keyword !== '') {
+            $q->where(function ($query) use ($keyword) {
+                $query->where('guardian_name', 'LIKE', "%{$keyword}%")
+                    ->orWhere('guardian_email', 'LIKE', "%{$keyword}%")
+                    // Parent / guardian mobile (main contact number on file)
+                    ->orWhere('guardian_mobile', 'LIKE', "%{$keyword}%")
+                    ->orWhere('father_name', 'LIKE', "%{$keyword}%")
+                    ->orWhere('father_mobile', 'LIKE', "%{$keyword}%")
+                    ->orWhere('mother_name', 'LIKE', "%{$keyword}%")
+                    ->orWhere('mother_mobile', 'LIKE', "%{$keyword}%")
+                    // Linked user account (login name / phone / email)
+                    ->orWhereHas('user', function ($uq) use ($keyword) {
+                        $uq->where('name', 'LIKE', "%{$keyword}%")
+                            ->orWhere('phone', 'LIKE', "%{$keyword}%")
+                            ->orWhere('email', 'LIKE', "%{$keyword}%");
+                    });
+            });
+        }
+
+        return $q->paginate(Settings::PAGINATE);
     }
 
     public function getParent($request)

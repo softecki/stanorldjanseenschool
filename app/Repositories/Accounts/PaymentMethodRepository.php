@@ -31,7 +31,8 @@ class PaymentMethodRepository
             $this->model->create([
                 'name'        => $request->name,
                 'description' => $request->description,
-                'is_active'   => $request->has('is_active') ? 1 : 0,
+                // Create form defaults to "Active" in UI; preserve that if field is omitted.
+                'is_active'   => $request->has('is_active') ? $request->boolean('is_active') : 1,
             ]);
             return $this->responseWithSuccess(___('alert.created_successfully'), []);
         } catch (\Throwable $e) {
@@ -50,7 +51,7 @@ class PaymentMethodRepository
             $this->model->findOrFail($id)->update([
                 'name'        => $request->name,
                 'description' => $request->description,
-                'is_active'   => $request->has('is_active') ? 1 : 0,
+                'is_active'   => $request->boolean('is_active'),
             ]);
             return $this->responseWithSuccess(___('alert.updated_successfully'), []);
         } catch (\Throwable $e) {

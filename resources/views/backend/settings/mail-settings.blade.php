@@ -151,7 +151,7 @@
 
                         <div class="col-md-12 mt-3">
                             <div class="text-end">
-                                @if (hasPermission('storage_settings_update'))
+                                @if (hasPermission('email_settings_update'))
                                     <button class="btn btn-lg ot-btn-primary">
                                         <span>
                                             <i class="fa-solid fa-save"></i>

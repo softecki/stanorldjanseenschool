@@ -1,16 +1,19 @@
 import React from 'react';
-import { AcademicFormPage } from '../../academic/AcademicPages';
+import { useParams } from 'react-router-dom';
+import { ExpenseEntryFormPage } from '../pages/ExpenseFormPage';
 
 export function DepositFormPage({ Layout }) {
+    const { id } = useParams();
     return (
-        <AcademicFormPage
+        <ExpenseEntryFormPage
             Layout={Layout}
             titleCreate="Create Deposit"
             titleEdit="Edit Deposit"
-            loadEndpoint="/deposit"
-            storeEndpoint="/deposit/store"
-            updateEndpoint="/deposit/update"
-            backTo="/accounts/deposits"
+            edit={Boolean(id)}
+            loadPath="/deposit"
+            storePath="/deposit/store"
+            updatePath="/deposit/update"
+            backTo="/deposits"
         />
     );
 }

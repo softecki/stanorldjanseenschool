@@ -436,6 +436,18 @@ class SettingRepository implements SettingInterface
     public function updatePaymentGatewaySetting($request)
     {
         try {
+            if ($request->has('payment_gateway')) {
+                $setting = $this->model::where('name', 'payment_gateway')->first();
+                if ($setting) {
+                    $setting->value = $request->payment_gateway;
+                } else {
+                    $setting = new $this->model;
+                    $setting->name = 'payment_gateway';
+                    $setting->value = $request->payment_gateway;
+                }
+                $setting->save();
+            }
+
             // UPDATE OR CREATE STRIPE PAYMENT GATEWAY CREDENTIALS
             if($request->payment_gateway == 'Stripe') {
                 if ($request->filled('stripe_key')) {
@@ -695,15 +707,15 @@ class SettingRepository implements SettingInterface
             }
 
 
-            // recaptcha write in env
-            $this->setEnvironmentValue('AWS_ACCESS_KEY_ID',           $request->aws_access_key_id);
-            $this->setEnvironmentValue('AWS_SECRET_ACCESS_KEY',       $request->aws_secret_key);
-            $this->setEnvironmentValue('AWS_DEFAULT_REGION',          $request->aws_region);
-            $this->setEnvironmentValue('AWS_BUCKET',                  $request->aws_bucket);
-            $this->setEnvironmentValue('AWS_ENDPOINT',                $request->aws_endpoint);
-            // recaptcha write in env
+            if ($request->input('file_system') === 's3') {
+                $this->setEnvironmentValue('AWS_ACCESS_KEY_ID', $request->aws_access_key_id);
+                $this->setEnvironmentValue('AWS_SECRET_ACCESS_KEY', $request->aws_secret_key);
+                $this->setEnvironmentValue('AWS_DEFAULT_REGION', $request->aws_region);
+                $this->setEnvironmentValue('AWS_BUCKET', $request->aws_bucket);
+                $this->setEnvironmentValue('AWS_ENDPOINT', $request->aws_endpoint);
+            }
 
-
+            return true;
         } catch (\Throwable $th) {
             return false;
         }

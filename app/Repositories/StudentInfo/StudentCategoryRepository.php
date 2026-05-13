@@ -6,6 +6,8 @@ use App\Enums\ApiStatus;
 use App\Traits\ReturnFormatTrait;
 use App\Models\StudentInfo\StudentCategory;
 use App\Interfaces\StudentInfo\StudentCategoryInterface;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class StudentCategoryRepository implements StudentCategoryInterface
 {
@@ -31,14 +33,24 @@ class StudentCategoryRepository implements StudentCategoryInterface
     public function store($request)
     {
         try {
+            $table              = $this->model->getTable();
             $store              = new $this->model;
             $store->name        = $request->name;
-            $store->description = $request->filled('description') ? $request->description : null;
-            $store->shortcode   = $request->filled('shortcode') ? $request->shortcode : null;
+            if (Schema::hasColumn($table, 'description')) {
+                $store->description = $request->filled('description') ? $request->description : null;
+            }
+            if (Schema::hasColumn($table, 'shortcode')) {
+                $store->shortcode = $request->filled('shortcode') ? $request->shortcode : null;
+            }
             $store->status      = $request->status;
             $store->save();
             return $this->responseWithSuccess(___('alert.created_successfully'), []);
         } catch (\Throwable $th) {
+            Log::error('StudentCategoryRepository::store', [
+                'message' => $th->getMessage(),
+                'exception' => $th,
+            ]);
+
             return $this->responseWithError(___('alert.something_went_wrong_please_try_again'), []);
 
         }
@@ -52,14 +64,24 @@ class StudentCategoryRepository implements StudentCategoryInterface
     public function update($request, $id)
     {
         try {
+            $table               = $this->model->getTable();
             $update              = $this->model->findOrfail($id);
             $update->name        = $request->name;
-            $update->description = $request->filled('description') ? $request->description : null;
-            $update->shortcode   = $request->filled('shortcode') ? $request->shortcode : null;
+            if (Schema::hasColumn($table, 'description')) {
+                $update->description = $request->filled('description') ? $request->description : null;
+            }
+            if (Schema::hasColumn($table, 'shortcode')) {
+                $update->shortcode = $request->filled('shortcode') ? $request->shortcode : null;
+            }
             $update->status      = $request->status;
             $update->save();
             return $this->responseWithSuccess(___('alert.updated_successfully'), []);
         } catch (\Throwable $th) {
+            Log::error('StudentCategoryRepository::update', [
+                'message' => $th->getMessage(),
+                'exception' => $th,
+            ]);
+
             return $this->responseWithError(___('school.Something went wrong'), []);
         }
     }
@@ -71,6 +93,11 @@ class StudentCategoryRepository implements StudentCategoryInterface
             $bloodGroupDestroy->delete();
             return $this->responseWithSuccess(___('alert.updated_successfully'), []);
         } catch (\Throwable $th) {
+            Log::error('StudentCategoryRepository::destroy', [
+                'message' => $th->getMessage(),
+                'exception' => $th,
+            ]);
+
             return $this->responseWithError(___('school.Something went wrong'), []);
         }
     }

@@ -97,8 +97,9 @@ class SmsCampaignController extends Controller
                 'quarter_column' => $quarterColumn
             ]);
             
-            // Find students with unpaid quarter amounts for current quarter
+            // Find students with unpaid quarter amounts for current quarter (active session)
             // Group by student_id to send only one SMS per student
+            $sessionId = setting('session');
             $studentsWithUnpaid = DB::select("
                 SELECT DISTINCT
                     fac.student_id,
@@ -112,19 +113,19 @@ class SmsCampaignController extends Controller
                     MAX(classes.name) as class_name,
                     MAX(sections.name) as section_name
                 FROM fees_assign_childrens fac
+                INNER JOIN fees_assigns fa ON fa.id = fac.fees_assign_id AND fa.session_id = ?
                 INNER JOIN students ON students.id = fac.student_id
                 LEFT JOIN parent_guardians ON students.parent_guardian_id = parent_guardians.id
                 LEFT JOIN session_class_students scs ON scs.student_id = students.id 
-                    AND scs.session_id = 9
+                    AND scs.session_id = ?
                 LEFT JOIN classes ON classes.id = scs.classes_id
                 LEFT JOIN sections ON sections.id = scs.section_id
-                WHERE YEAR(fac.created_at) = 2026
-                  AND fac.{$quarterColumn} > 0
+                WHERE fac.{$quarterColumn} > 0
                   AND parent_guardians.guardian_mobile IS NOT NULL
                   AND parent_guardians.guardian_mobile != ''
                 GROUP BY fac.student_id, students.first_name, students.last_name, parent_guardians.guardian_mobile
                 HAVING total_unpaid_quarter > 0
-            ");
+            ", [$sessionId, $sessionId]);
             
             $sentCount = 0;
             $failedCount = 0;

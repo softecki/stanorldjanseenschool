@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { Shell } from '../../BankAccountsModuleShared';
 import { xhrJson } from '../../../api/xhrJson';
 import {
+    UiActionGroup,
     UiButtonLink,
     UiHeadRow,
-    UiIconLinkEdit,
     UiTable,
     UiTableEmptyRow,
     UiTableWrap,
@@ -16,19 +16,53 @@ import {
     UiTR,
 } from '../../../ui/UiKit';
 
+function formatErr(ex) {
+    const d = ex.response?.data;
+    if (!d) return ex.message || 'Request failed.';
+    if (typeof d.message === 'string') return d.message;
+    if (d.errors && typeof d.errors === 'object') {
+        return Object.entries(d.errors)
+            .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(' ') : v}`)
+            .join(' · ');
+    }
+    return 'Request failed.';
+}
+
 export function BankAccountsListPage({ Layout }) {
     const [rows, setRows] = useState([]);
     const [meta, setMeta] = useState({});
     const [err, setErr] = useState('');
-    useEffect(() => {
-        axios
+    const [deletingId, setDeletingId] = useState(null);
+
+    const load = useCallback(() => {
+        setErr('');
+        return axios
             .get('/banksAccounts', { headers: xhrJson })
             .then((r) => {
-                setRows(r.data?.data || []);
+                const list = r.data?.data;
+                setRows(Array.isArray(list) ? list : []);
                 setMeta(r.data?.meta || {});
             })
-            .catch((ex) => setErr(ex.response?.data?.message || 'Failed to load bank accounts.'));
+            .catch((ex) => setErr(formatErr(ex)));
     }, []);
+
+    useEffect(() => {
+        load();
+    }, [load]);
+
+    const remove = async (id) => {
+        if (!window.confirm('Delete this bank account?')) return;
+        setErr('');
+        setDeletingId(id);
+        try {
+            await axios.delete(`/banksAccounts/delete/${id}`, { headers: xhrJson });
+            await load();
+        } catch (ex) {
+            setErr(formatErr(ex));
+        } finally {
+            setDeletingId(null);
+        }
+    };
 
     return (
         <Shell Layout={Layout}>
@@ -60,9 +94,7 @@ export function BankAccountsListPage({ Layout }) {
                                     <UiTD className="font-mono text-xs">{row.account_number}</UiTD>
                                     <UiTD>{row.status ? 'Active' : 'Inactive'}</UiTD>
                                     <UiTD className="text-right">
-                                        <div className="flex justify-end">
-                                            <UiIconLinkEdit to={`/banks-accounts/${row.id}/edit`} />
-                                        </div>
+                                        <UiActionGroup editTo={`/banks-accounts/${row.id}/edit`} onDelete={() => remove(row.id)} busy={deletingId === row.id} />
                                     </UiTD>
                                 </UiTR>
                             ))
@@ -75,4 +107,3 @@ export function BankAccountsListPage({ Layout }) {
         </Shell>
     );
 }
-

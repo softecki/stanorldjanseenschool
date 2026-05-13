@@ -407,7 +407,7 @@ class PromoteStudentRepository implements PromoteStudentInterface
                       AND fees_assigns.fees_group_id = 3
                       AND fees_assigns.session_id = ?
                     LIMIT 1
-                ", [$student_id, '8']);
+                ", [$student_id, setting('session')]);
 
                 if (!empty($previousTransportFeeType)) {
                     $transportFeeTypeId = $previousTransportFeeType[0]->fees_type_id;
@@ -545,7 +545,7 @@ class PromoteStudentRepository implements PromoteStudentInterface
                 'trace' => $th->getTraceAsString(),
                 'request' => $request->all()
             ]);
-            return $this->responseWithError(___('alert.something_went_wrong_please_try_again') . ': ' . $th->getMessage(), []);
+            return $this->responseWithError(___('alert.something_went_wrong_please_try_again'), []);
         }
     }
 
@@ -618,6 +618,9 @@ class PromoteStudentRepository implements PromoteStudentInterface
     public function getSections($request)
     {
         $result = ClassSetup::where('session_id', $request->session)->where('classes_id', $request->class)->with('classSetupChildrenAll')->first();
+        if (!$result) {
+            return collect([]);
+        }
         return ClassSetupChildren::where('class_setup_id', $result->id)->with('section')->get();
     }
 }

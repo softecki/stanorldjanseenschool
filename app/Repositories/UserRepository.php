@@ -81,7 +81,10 @@ class UserRepository implements UserInterface
 
     public function getAll()
     {
-        return $this->model->query()->orderBy('id', 'DESC')->paginate(10);
+        return $this->model->query()
+            ->with(['role', 'department', 'designation', 'upload'])
+            ->orderBy('id', 'DESC')
+            ->paginate(10);
     }
 
     public function store($request)
@@ -450,8 +453,6 @@ class UserRepository implements UserInterface
             DB::commit();
             return true;
         } catch (\Throwable $th) {
-
-            dd($th);
             DB::rollback();
             return false;
         }
@@ -476,11 +477,25 @@ class UserRepository implements UserInterface
     public function destroy($id)
     {
         try {
-            $user   = User::find($id);
-            $this->UploadImageDelete($user->upload_id); // delete image & record
-            $user->delete();
+            DB::beginTransaction();
+            $staff = $this->model->find($id);
+            if (! $staff) {
+                DB::rollBack();
+
+                return false;
+            }
+            $user = $staff->user_id ? User::find($staff->user_id) : null;
+            $staff->delete();
+            if ($user) {
+                $this->UploadImageDelete($user->upload_id);
+                $user->delete();
+            }
+            DB::commit();
+
             return true;
         } catch (\Throwable $th) {
+            DB::rollBack();
+
             return false;
         }
     }

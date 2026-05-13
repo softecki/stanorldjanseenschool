@@ -20,12 +20,22 @@ class FeesAssignChildren extends Model
 
     public function feesMaster()
     {
-        return $this->belongsTo(feesMaster::class, 'fees_master_id', 'id');
+        return $this->belongsTo(FeesMaster::class, 'fees_master_id', 'id');
     }
 
     public function feesCollect()
     {
         return $this->hasOne(FeesCollect::class, 'fees_assign_children_id', 'id');
+    }
+
+    /**
+     * All payment rows for this assignment line (newest first).
+     */
+    public function feesCollects()
+    {
+        return $this->hasMany(FeesCollect::class, 'fees_assign_children_id', 'id')
+            ->orderByDesc('fees_collects.created_at')
+            ->orderByDesc('fees_collects.id');
     }
 
     public function feesAssign()

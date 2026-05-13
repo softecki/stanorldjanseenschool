@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { Shell, paginateRows } from '../../GenderModuleShared';
 import { xhrJson } from '../../../api/xhrJson';
@@ -17,14 +17,28 @@ import {
     UiTR,
 } from '../../../ui/UiKit';
 
+function formatErr(ex) {
+    const d = ex.response?.data;
+    if (!d) return ex.message || 'Request failed.';
+    if (typeof d.message === 'string') return d.message;
+    if (d.errors && typeof d.errors === 'object') {
+        return Object.entries(d.errors)
+            .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(' ') : v}`)
+            .join(' · ');
+    }
+    return 'Request failed.';
+}
+
 export function GendersListPage({ Layout }) {
     const [rows, setRows] = useState([]);
     const [paginator, setPaginator] = useState(null);
     const [meta, setMeta] = useState({});
     const [err, setErr] = useState('');
+    const [deletingId, setDeletingId] = useState(null);
 
-    const load = (page = 1) =>
-        axios
+    const load = useCallback((page = 1) => {
+        setErr('');
+        return axios
             .get('/genders', { headers: xhrJson, params: { page } })
             .then((r) => {
                 const { rows: list, paginator: pg } = paginateRows(r);
@@ -32,19 +46,24 @@ export function GendersListPage({ Layout }) {
                 setPaginator(pg);
                 setMeta(r.data?.meta ?? {});
             })
-            .catch((ex) => setErr(ex.response?.data?.message || 'Failed to load.'));
+            .catch((ex) => setErr(formatErr(ex)));
+    }, []);
 
     useEffect(() => {
-        load();
-    }, []);
+        load(1);
+    }, [load]);
 
     const remove = async (id) => {
         if (!window.confirm('Delete this gender?')) return;
+        setErr('');
+        setDeletingId(id);
         try {
             await axios.delete(`/genders/delete/${id}`, { headers: xhrJson });
-            load(paginator?.current_page || 1);
+            await load(paginator?.current_page || 1);
         } catch (ex) {
-            setErr(ex.response?.data?.message || 'Delete failed.');
+            setErr(formatErr(ex));
+        } finally {
+            setDeletingId(null);
         }
     };
 
@@ -78,6 +97,7 @@ export function GendersListPage({ Layout }) {
                                             editTo={`/settings/genders/${row.id}/edit`}
                                             translateTo={`/settings/genders/${row.id}/translate`}
                                             onDelete={() => remove(row.id)}
+                                            busy={deletingId === row.id}
                                         />
                                     </UiTD>
                                 </UiTR>

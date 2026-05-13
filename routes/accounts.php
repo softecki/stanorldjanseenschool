@@ -38,6 +38,7 @@ Route::middleware(saasMiddleware())->group(function () {
 
                 Route::controller(ChartOfAccountsController::class)->prefix('chart-of-accounts')->group(function () {
                     Route::get('/', 'index')->name('chart-of-accounts.index')->middleware('PermissionCheck:account_head_read');
+                    Route::get('/show/{id}', 'show')->name('chart-of-accounts.show')->middleware('PermissionCheck:account_head_read');
                     Route::get('/create', 'create')->name('chart-of-accounts.create')->middleware('PermissionCheck:account_head_create');
                     Route::post('/store', 'store')->name('chart-of-accounts.store')->middleware('PermissionCheck:account_head_create', 'DemoCheck');
                     Route::get('/edit/{id}', 'edit')->name('chart-of-accounts.edit')->middleware('PermissionCheck:account_head_update');
@@ -47,6 +48,7 @@ Route::middleware(saasMiddleware())->group(function () {
 
                 Route::controller(PaymentMethodController::class)->prefix('payment-methods')->group(function () {
                     Route::get('/', 'index')->name('payment-methods.index')->middleware('PermissionCheck:account_head_read');
+                    Route::get('/show/{id}', 'show')->name('payment-methods.show')->middleware('PermissionCheck:account_head_read');
                     Route::get('/create', 'create')->name('payment-methods.create')->middleware('PermissionCheck:account_head_create');
                     Route::post('/store', 'store')->name('payment-methods.store')->middleware('PermissionCheck:account_head_create', 'DemoCheck');
                     Route::get('/edit/{id}', 'edit')->name('payment-methods.edit')->middleware('PermissionCheck:account_head_update');
@@ -56,6 +58,7 @@ Route::middleware(saasMiddleware())->group(function () {
 
                 Route::controller(AccountHeadController::class)->prefix('account-head')->group(function () {
                     Route::get('/',                 'index')->name('account_head.index')->middleware('PermissionCheck:account_head_read');
+                    Route::get('/show/{id}',        'show')->name('account_head.show')->middleware('PermissionCheck:account_head_read');
                     Route::get('/create',           'create')->name('account_head.create')->middleware('PermissionCheck:account_head_create');
                     Route::post('/store',           'store')->name('account_head.store')->middleware('PermissionCheck:account_head_create', 'DemoCheck');
                     Route::get('/edit/{id}',        'edit')->name('account_head.edit')->middleware('PermissionCheck:account_head_update');
@@ -96,27 +99,18 @@ Route::middleware(saasMiddleware())->group(function () {
                     Route::get('/sell',           'create_sell')->name('product.sell')->middleware('PermissionCheck:expense_create');
                     Route::post('/store',           'store_product')->name('product.store')->middleware('PermissionCheck:expense_create', 'DemoCheck');
                     Route::post('/sellout',           'store_sell')->name('product.sellout')->middleware('PermissionCheck:expense_create', 'DemoCheck');
-                    Route::get('/edit/{id}',        'edit')->name('product.edit')->middleware('PermissionCheck:expense_update');
-                    Route::put('/update/{id}',      'update')->name('product.update')->middleware('PermissionCheck:expense_update', 'DemoCheck');
-                    Route::delete('/delete/{id}',   'delete')->name('product.delete')->middleware('PermissionCheck:expense_delete', 'DemoCheck');
+                    Route::get('/edit/{id}',        'edit_product')->name('product.edit')->middleware('PermissionCheck:expense_update');
+                    Route::put('/update/{id}',      'update_product')->name('product.update')->middleware('PermissionCheck:expense_update', 'DemoCheck');
+                    Route::delete('/delete/{id}',   'delete_product')->name('product.delete')->middleware('PermissionCheck:expense_delete', 'DemoCheck');
                 });
 
                    Route::controller(ExpenseController::class)->prefix('item')->group(function () {
                     Route::get('/cash',                 'index_item')->name('item.index')->middleware('PermissionCheck:expense_read');
                     Route::get('/create',           'create_item')->name('item.create')->middleware('PermissionCheck:expense_create');
                     Route::post('/store',           'store_item')->name('item.store')->middleware('PermissionCheck:expense_create', 'DemoCheck');
-                    Route::get('/edit/{id}',        'edit')->name('item.edit')->middleware('PermissionCheck:expense_update');
-                    Route::put('/update/{id}',      'update')->name('item.update')->middleware('PermissionCheck:expense_update', 'DemoCheck');
-                    Route::delete('/delete/{id}',   'delete')->name('item.delete')->middleware('PermissionCheck:expense_delete', 'DemoCheck');
-                });
-
-                    Route::controller(ExpenseController::class)->prefix('balance')->group(function () {
-                    Route::get('/cash',                 'index_balance')->name('balance.index')->middleware('PermissionCheck:expense_read');
-                    Route::get('/create',           'create_item')->name('balance.create')->middleware('PermissionCheck:expense_create');
-                    Route::post('/store',           'store_item')->name('balance.store')->middleware('PermissionCheck:expense_create', 'DemoCheck');
-                    Route::get('/edit/{id}',        'edit')->name('balance.edit')->middleware('PermissionCheck:expense_update');
-                    Route::put('/update/{id}',      'update')->name('balance.update')->middleware('PermissionCheck:expense_update', 'DemoCheck');
-                    Route::delete('/delete/{id}',   'delete')->name('balance.delete')->middleware('PermissionCheck:expense_delete', 'DemoCheck');
+                    Route::get('/edit/{id}',        'edit_item')->name('item.edit')->middleware('PermissionCheck:expense_update');
+                    Route::put('/update/{id}',      'update_item')->name('item.update')->middleware('PermissionCheck:expense_update', 'DemoCheck');
+                    Route::delete('/delete/{id}',   'delete_item')->name('item.delete')->middleware('PermissionCheck:expense_delete', 'DemoCheck');
                 });
 
                 Route::controller(\App\Http\Controllers\DepositsController::class)->prefix('deposit')->group(function () {

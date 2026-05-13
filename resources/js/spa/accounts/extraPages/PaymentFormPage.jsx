@@ -10,7 +10,7 @@ export function PaymentFormPage({ Layout }) {
             loadEndpoint="/payments"
             storeEndpoint="/payments/store"
             updateEndpoint="/payments/update"
-            backTo="/accounts/payments"
+            backTo="/payments"
         />
     );
 }

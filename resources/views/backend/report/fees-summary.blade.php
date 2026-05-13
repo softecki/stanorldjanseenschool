@@ -607,6 +607,7 @@
                                     <th >{{'Remained '}} ({{ Setting('currency_symbol') }})</th>
                                     <th >{{'Outstanding  '}} ({{ Setting('currency_symbol') }})</th>
                                     <th >{{'Total Remained'}}</th>
+                                    <th>Comment</th>
 
                                 </tr>
                                 </thead>
@@ -631,10 +632,11 @@
                                              number_format($item->remained_amount, 2) }}</td>
                                             <td>{{ $item->outstanding_remained_amount ?? 0 }}</td>
                                             <td>{{ ($item->outstanding_remained_amount ?? 0) + ($item->remained_amount ?? 0) }}</td>
+                                            <td>{{ $item->assign_comments ?? '' }}</td>
                                         </tr>
                                     @empty
                                         <tr>
-                                            <td colspan="8" class="td-text-center">
+                                            <td colspan="9" class="td-text-center">
                                                 @include('backend.includes.no-data')
                                             </td>
                                         </tr>
@@ -647,6 +649,7 @@
                                          <td><strong>{{ number_format($paid_amount, 2) }}</strong></td>
                                           <td><strong>{{ number_format($remained_amount, 2) }}</strong></td>
                                         <td colspan="2"></td>
+                                        <td></td>
                                     </tr>
                                 </tfoot>
                             </table>

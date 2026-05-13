@@ -7,8 +7,8 @@ export function TransactionsPage({ Layout }) {
             Layout={Layout}
             title="Transactions"
             endpoint="/transactions"
-            createTo="/accounts/transactions/create"
-            editBase="/accounts/transactions"
+            createTo="/account-transactions/create"
+            editBase="/account-transactions"
         />
     );
 }

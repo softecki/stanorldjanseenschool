@@ -24,8 +24,10 @@ class FeesGroupStoreRequest extends FormRequest
     public function rules()
     {
         return [
-            'name'      => 'required|max:255|unique:fees_groups',
-            'status'    => 'required'
+            'name'                   => 'required|max:255|unique:fees_groups',
+            'status'                 => 'required|in:0,1,2',
+            'description'            => 'nullable|string',
+            'online_admission_fees'  => 'nullable|in:0,1',
         ];
     }
 }

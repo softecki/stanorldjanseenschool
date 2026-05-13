@@ -1,15 +1,59 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { AdminLayout } from '../../layout/AdminLayout';
 import { xhrJson } from '../../api/xhrJson';
 import { FullPageLoader, mappedClassOptions } from '../StudentModuleShared';
 
+function FieldIcon({ children }) {
+    return (
+        <span className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 rounded-md bg-white/90 px-1 text-[15px] leading-none text-blue-600 shadow-sm">
+            {children}
+        </span>
+    );
+}
+
+function FloatingInput({ icon, label, className = '', value, ...props }) {
+    const floated = value !== undefined && value !== null && String(value) !== '';
+    return (
+        <div className="relative group">
+            <FieldIcon>{icon}</FieldIcon>
+            <input
+                {...props}
+                value={value}
+                placeholder=" "
+                className={`w-full rounded-xl border border-gray-200 bg-white px-12 pb-2 pt-6 text-sm shadow-sm transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 ${className}`}
+            />
+            <span className={`pointer-events-none absolute left-12 text-gray-500 transition-all duration-150 ${floated ? 'top-2 text-[11px]' : 'top-1/2 -translate-y-1/2 text-sm group-focus-within:top-2 group-focus-within:translate-y-0 group-focus-within:text-[11px]'}`}>
+                {label}
+            </span>
+        </div>
+    );
+}
+
+function FloatingSelect({ icon, label, className = '', value, children, ...props }) {
+    const floated = value !== undefined && value !== null && String(value) !== '';
+    return (
+        <div className="relative group">
+            <FieldIcon>{icon}</FieldIcon>
+            <select
+                {...props}
+                value={value}
+                className={`w-full rounded-xl border border-gray-200 bg-white px-12 pb-2 pt-6 text-sm shadow-sm transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 ${className}`}
+            >
+                {children}
+            </select>
+            <span className={`pointer-events-none absolute left-12 text-gray-500 transition-all duration-150 ${floated ? 'top-2 text-[11px]' : 'top-1/2 -translate-y-1/2 text-sm group-focus-within:top-2 group-focus-within:translate-y-0 group-focus-within:text-[11px]'}`}>
+                {label}
+            </span>
+        </div>
+    );
+}
+
 export function StudentCreatePage() {
     const nav = useNavigate();
     const [meta, setMeta] = useState({});
     const [sections, setSections] = useState([]);
-    const [parents, setParents] = useState([]);
     const [form, setForm] = useState({
         admission_no: '',
         first_name: '',
@@ -24,7 +68,6 @@ export function StudentCreatePage() {
         second_mobile: '',
         email: '',
         residance_address: '',
-        parent: '',
         status: '1',
     });
     const [err, setErr] = useState('');
@@ -47,9 +90,6 @@ export function StudentCreatePage() {
             })
             .catch((ex) => setErr(ex.response?.data?.message || 'Failed to load form.'))
             .finally(() => setLoading(false));
-        axios.get('/parent', { headers: xhrJson })
-            .then((r) => setParents(r.data?.data?.data || r.data?.data || []))
-            .catch(() => setParents([]));
     }, []);
 
     useEffect(() => {
@@ -84,48 +124,40 @@ export function StudentCreatePage() {
     return (
         <AdminLayout>
             <div className="mx-auto max-w-7xl p-6">
-                <div className="mb-5 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-                    <div className="flex items-center justify-between">
-                        <h1 className="text-2xl font-semibold text-gray-800">{meta.title || 'Create Student'}</h1>
-                        <Link to="/students" className="rounded-lg border border-gray-200 px-3.5 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50">Back</Link>
-                    </div>
-                </div>
                 {err ? <p className="mb-3 text-sm text-red-600">{err}</p> : null}
                 {loading ? <FullPageLoader text="Loading student form..." /> : null}
-                {!loading ? <form onSubmit={submit} className="grid gap-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm md:grid-cols-3">
-                    <input className="rounded-lg border border-gray-200 px-3 py-2 text-sm" placeholder="Admission No" value={form.admission_no} onChange={(e) => setForm({ ...form, admission_no: e.target.value })} />
-                    <input className="rounded-lg border border-gray-200 px-3 py-2 text-sm" placeholder="First name" value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} required />
-                    <input className="rounded-lg border border-gray-200 px-3 py-2 text-sm" placeholder="Last name" value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} required />
-                    <input type="date" className="rounded-lg border border-gray-200 px-3 py-2 text-sm" value={form.date_of_birth} onChange={(e) => setForm({ ...form, date_of_birth: e.target.value })} />
-                    <input type="date" className="rounded-lg border border-gray-200 px-3 py-2 text-sm" value={form.admission_date} onChange={(e) => setForm({ ...form, admission_date: e.target.value })} />
-                    <select className="rounded-lg border border-gray-200 px-3 py-2 text-sm" value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })}>
-                        <option value="">Select gender</option>
-                        {(meta.genders || []).map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-                    </select>
-                    <select className="rounded-lg border border-gray-200 px-3 py-2 text-sm" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
-                        <option value="">Select category</option>
-                        {(meta.categories || []).map((c) => <option key={c.id} value={c.id}>{c.title || c.name}</option>)}
-                    </select>
-                    <select className="rounded-lg border border-gray-200 px-3 py-2 text-sm" value={form.class} onChange={(e) => setForm({ ...form, class: e.target.value, section: '' })} required>
-                        <option value="">Select class</option>
-                        {mappedClassOptions(meta.classes || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
-                    <select className="rounded-lg border border-gray-200 px-3 py-2 text-sm" value={form.section} onChange={(e) => setForm({ ...form, section: e.target.value })} required>
-                        <option value="">Select section</option>
-                        {sections.map((s) => <option key={s?.section?.id || s.id} value={s?.section?.id || s.id}>{s?.section?.name || s.name}</option>)}
-                    </select>
-                    <select className="rounded-lg border border-gray-200 px-3 py-2 text-sm" value={form.parent} onChange={(e) => setForm({ ...form, parent: e.target.value })}>
-                        <option value="">Select parent</option>
-                        {parents.map((p) => <option key={p.id} value={p.id}>{p.name || `${p.first_name || ''} ${p.last_name || ''}`.trim() || `Parent #${p.id}`}</option>)}
-                    </select>
-                    <input className="rounded-lg border border-gray-200 px-3 py-2 text-sm" placeholder="Parent mobile" value={form.mobile} onChange={(e) => setForm({ ...form, mobile: e.target.value })} />
-                    <input className="rounded-lg border border-gray-200 px-3 py-2 text-sm" placeholder="Second mobile" value={form.second_mobile} onChange={(e) => setForm({ ...form, second_mobile: e.target.value })} />
-                    <input className="rounded-lg border border-gray-200 px-3 py-2 text-sm md:col-span-2" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-                    <select className="rounded-lg border border-gray-200 px-3 py-2 text-sm" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-                        <option value="1">Active</option>
-                        <option value="2">Inactive</option>
-                    </select>
-                    <input className="rounded-lg border border-gray-200 px-3 py-2 text-sm md:col-span-3" placeholder="Residence address" value={form.residance_address} onChange={(e) => setForm({ ...form, residance_address: e.target.value })} />
+                {!loading ? <form onSubmit={submit} className="space-y-5">
+                    <div className="grid gap-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm md:grid-cols-3">
+                    <FloatingInput icon="🆔" label="Admission No" value={form.admission_no} onChange={(e) => setForm({ ...form, admission_no: e.target.value })} />
+                    <FloatingInput icon="👤" label="First name *" value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} required />
+                    <FloatingInput icon="👤" label="Last name *" value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} required />
+                    <FloatingInput icon="📅" label="Date of birth" type="date" value={form.date_of_birth} onChange={(e) => setForm({ ...form, date_of_birth: e.target.value })} />
+                    <FloatingInput icon="📌" label="Admission date" type="date" value={form.admission_date} onChange={(e) => setForm({ ...form, admission_date: e.target.value })} />
+                    <FloatingSelect icon="⚧" label="Gender" value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })}>
+                            <option value="">Select gender</option>
+                            {(meta.genders || []).map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                        </FloatingSelect>
+                    <FloatingSelect icon="🏷️" label="Category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+                            <option value="">Select category</option>
+                            {(meta.categories || []).map((c) => <option key={c.id} value={c.id}>{c.title || c.name}</option>)}
+                        </FloatingSelect>
+                    <FloatingSelect icon="🏫" label="Class *" value={form.class} onChange={(e) => setForm({ ...form, class: e.target.value, section: '' })} required>
+                            <option value="">Select class</option>
+                            {mappedClassOptions(meta.classes || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </FloatingSelect>
+                    <FloatingSelect icon="📚" label="Section *" value={form.section} onChange={(e) => setForm({ ...form, section: e.target.value })} required>
+                            <option value="">Select section</option>
+                            {sections.map((s) => <option key={s?.section?.id || s.id} value={s?.section?.id || s.id}>{s?.section?.name || s.name}</option>)}
+                        </FloatingSelect>
+                    <FloatingInput icon="📱" label="Parent mobile *" value={form.mobile} onChange={(e) => setForm({ ...form, mobile: e.target.value })} required />
+                    <FloatingInput icon="📞" label="Second mobile" value={form.second_mobile} onChange={(e) => setForm({ ...form, second_mobile: e.target.value })} />
+                    <FloatingInput icon="✉️" label="Email" className="md:col-span-2" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+                    <FloatingSelect icon="✅" label="Status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+                            <option value="1">Active</option>
+                            <option value="0">Inactive</option>
+                        </FloatingSelect>
+                    <FloatingInput icon="📍" label="Residence address" className="md:col-span-3" value={form.residance_address} onChange={(e) => setForm({ ...form, residance_address: e.target.value })} />
+                    </div>
                     <div className="md:col-span-3 flex justify-end gap-2 border-t border-gray-100 pt-3">
                         <Link to="/students" className="rounded-lg border border-gray-200 px-3.5 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50">Cancel</Link>
                         <button disabled={saving} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-60">{saving ? 'Saving...' : 'Create Student'}</button>

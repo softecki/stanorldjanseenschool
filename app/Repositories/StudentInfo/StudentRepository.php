@@ -241,7 +241,13 @@ class StudentRepository implements StudentInterface
                         $lastNameToUse .= $studentMiddleName;
                         $parentName = $studentSecondName ." ". $studentMiddleName;
                     }
-                      $receiver_account = trim($request->mobile);
+                      $receiver_account = trim((string) $request->mobile);
+                        if ($receiver_account === '') {
+                            return [
+                                'status' => false,
+                                'message' => 'Parent mobile is required.',
+                            ];
+                        }
                         if (strpos($receiver_account, '0') === 0) {
                             $receiver_account = '+255' . substr($receiver_account, 1);
                         } elseif (strpos($receiver_account, '+255') === 0) {
@@ -250,9 +256,9 @@ class StudentRepository implements StudentInterface
                         } else {
                             $receiver_account = '+255' . $receiver_account;
                         }
-                        $request->mobile =  $receiver_account;
-                        
-                    $parentEmail = strtolower(!empty($row['email']) ? $request->email : (trim($studentFirstName) . trim($lastNameToUse) . '@gmail.com'));
+                        $request->merge(['mobile' => $receiver_account]);
+
+                    $parentEmail = strtolower(!empty($request->email) ? $request->email : (trim($studentFirstName) . trim($lastNameToUse) . '@gmail.com'));
 
                     // Use guardian_mobile to avoid duplicate parents: reuse existing parent if found
                     $existingParentId = $this->getParentIdByPhone($request->mobile);
@@ -351,7 +357,7 @@ class StudentRepository implements StudentInterface
             $row->student_category_id  = $request->category != ""? $request->category :  NULL;
             $row->previous_school_image_id = $this->UploadImageCreate($request->previous_school_image, 'backend/uploads/students');
             $row->residance_address = $request->residance_address;
-            $row->status               = "1";
+            $row->status               = $this->normalizeStudentStatus($request->input('status'));
             $row->upload_documents     = $this->uploadDocuments($request);
             $row->residance_address = $request->residance_address??'';
             $row->control_number = "00".$this->generateUniquecONTROLNumber();
@@ -375,170 +381,17 @@ class StudentRepository implements StudentInterface
             $member->status           = "1";
             $member->save();
 
-            if (empty($this->checkFeesAssign($request->class,$this->getFeeGroupId($this->getFeeTypeId($request->class)),$request->section))) {
-                $rowFeesAssign = new FeesAssign();
-                $rowFeesAssign->session_id = setting('session');
-                $rowFeesAssign->classes_id = $request->class;
-                $rowFeesAssign->section_id =  $request->section;
-                $rowFeesAssign->fees_group_id = $this->getFeeGroupId($this->getFeeTypeId($request->class));
-                $rowFeesAssign->save();
-                $feesAssignId = $rowFeesAssign->id;
-            }else{
-                $feesAssignId = $this->checkFeesAssign($request->class,$this->getFeeGroupId($this->getFeeTypeId($request->class)),$request->section);
-            }
+            $catForFees = $this->normalizeStudentCategoryIdForFees($request->category);
+            $classIdForFees = (int) $request->class;
+            $sectionForFees = $request->filled('section') ? (int) $request->section : null;
 
-            $quaters = $this->getFeeMasterAmount($this->getFeeMasterId($this->getFeeTypeId($request->class))) / 4;
-            if (empty($this->checkFeesAssignChildren($feesAssignId, $this->getFeeMasterId($this->getFeeTypeId($request->class)), $student_id))) {
-                $feesChield = new FeesAssignChildren();
-                $feesChield->fees_assign_id = $feesAssignId;
-                $feesChield->fees_master_id = $this->getFeeMasterId($this->getFeeTypeId($request->class));
-                $feesChield->student_id = $student_id;
-                $feesChield->fees_amount = $this->getFeeMasterAmount($this->getFeeMasterId($this->getFeeTypeId($request->class)));
-                $feesChield->paid_amount = '0';
-                $feesChield->remained_amount = $this->getFeeMasterAmount($this->getFeeMasterId($this->getFeeTypeId($request->class)));
-                $feesChield->quater_one = $quaters;
-                $feesChield->quater_two = $quaters;
-                $feesChield->quater_three = $quaters;
-                $feesChield->quater_four = $quaters;
-                $feesChield->quater_amount = $quaters;
-                $feesChield->control_number = $this->getStudentControlNumber($student_id);
-                $feesChield->fee_group = "2";
-                $feesChield->save();
-
-        }
-
-        if (str_contains(strtoupper($this->getCategory($request->category)), "BOARDING")) {
-            $feeAmount = 2000000; // Assign as an integer
-            
-            // Fetch the ID
-            $result = DB::select("SELECT fees_assign_childrens.id FROM fees_assign_childrens 
-                                  INNER JOIN fees_assigns 
-                                  ON fees_assign_childrens.fees_assign_id = fees_assigns.id 
-                                  WHERE fees_assigns.fees_group_id = ? and fees_assign_childrens.student_id = ? ", [2, $student_id ]);
-        
-            // Ensure there's a result
-            if (!empty($result)) {
-                $id = $result[0]->id; // Extract the first ID
-                
-                // Find the record and update it
-                $feesChield = FeesAssignChildren::findOrFail($id);
-                $feesChield->fees_master_id = 20; // Update the fees_master_id
-                $feesChield->fees_amount = $feeAmount;
-                $feesChield->remained_amount = $feeAmount;
-                $feesChield->quater_one = $feeAmount / 4;
-                $feesChield->quater_two = $feeAmount / 4;
-                $feesChield->quater_three = $feeAmount / 4;
-                $feesChield->quater_four = $feeAmount / 4;
-                $feesChield->fee_group = "2";
-                $feesChield->save();
+            if ($this->isBoardingStudentCategory($catForFees)) {
+                $this->syncAutoSchoolFeeFromBoardingCategoryForStudent((int) $student_id, $classIdForFees, $sectionForFees, $catForFees);
             } else {
-                // Handle the case where no records are found
-                // throw new Exception("No records found for the specified fees_group_id.");
-            }
-        }
-
-        //Assign transportation automatically
-        $feeTypeId = 0;
-        $feeAssignId = DB::select('SELECT id FROM fees_assigns WHERE classes_id = ? AND session_id = ? AND fees_group_id = ?', [$request->class,setting('session'),"3"]);
-        if (empty($feeAssignId)) {
-            $row                = new FeesAssign();
-            $row->session_id    = setting('session');
-            $row->classes_id      = $request->class;
-            $row->section_id    = $request->section;
-            $row->fees_group_id = "3";
-            $row->save();
-            $feeAssignId = $row->id;
-        }else{
-            $feeAssignId = DB::select('SELECT id FROM fees_assigns WHERE classes_id = ? AND session_id = ? AND fees_group_id = ?', [$request->class,setting('session'),"3"])[0]->id;
-        }
-
-
-        $transportProfile = DB::select("
-        SELECT student_categories.name 
-                FROM student_categories
-                INNER JOIN students ON students.student_category_id = student_categories.id
-                WHERE students.id = ?
-            ", [$student_id]);
-    
-            if(!empty($transportProfile)){
-                $transportProfile =$transportProfile[0]->name;
-            // Split transport profile based on 'DAY'
-            $transportProfileParts = explode(' DAY ', $transportProfile);
-            if (!empty($transportProfileParts[1])) {
-                Log::info("transportProfileParts".$transportProfileParts[1]);
-                // Get fee type ID based on transport profile part
-                $feeTypeResult = DB::select("
-                    SELECT id 
-                    FROM fees_types 
-                    WHERE code = ?
-                ", [trim($transportProfileParts[1])]);
-                
-                if (!empty($feeTypeResult)) {
-                    $feeTypeId = $feeTypeResult[0]->id;
-                    Log::info($feeTypeId);
-
-                    // Get fees master ID based on fee type ID and session (2026)
-                    $feesMasterResult = DB::select("
-                        SELECT id 
-                        FROM fees_masters 
-                        WHERE fees_type_id = ? AND session_id = ?
-                    ", [$feeTypeId, setting('session')]);
-                    
-                    if (!empty($feesMasterResult)) {
-                        $fees_master = $feesMasterResult[0]->id;
-                    }
-                }
+                $this->syncAutoSchoolFeeFromClassForStudent((int) $student_id, $classIdForFees, $sectionForFees, $catForFees);
+                $this->syncAutoTransportFeeFromCategoryForStudent((int) $student_id, $classIdForFees, $sectionForFees, $catForFees);
             }
 
-            if ($feeTypeId != 0) {
-                // Check if a fee assignment already exists
-                $feeAssignChildren = DB::select('
-                    SELECT id 
-                    FROM fees_assign_childrens 
-                    WHERE fees_assign_id = ? AND fees_master_id = ? AND student_id = ?
-                ', [$feeAssignId, $fees_master, $student_id]);
-    
-                if (empty($feeAssignChildren)) {
-                    // Ensure student has a control number
-                    $controlNumber = $this->getStudentControlNumber($student_id);
-                    if (!empty($controlNumber)) {
-                        $feesChild = new FeesAssignChildren();
-                        $feesChild->fees_assign_id = $feeAssignId;
-                        $feesChild->fees_master_id = $fees_master;
-                        $feesChild->student_id = $student_id;
-                        $feesChild->fees_amount = $this->getFeesAmount($fees_master);
-                        $feesChild->remained_amount = $this->getFeesAmount($fees_master);
-                        $feesChild->control_number = $controlNumber;
-    
-                        // Divide fees into quarters if due date allows
-                        if ($this->getDueDate($fees_master) > 8) {
-                            $quarterAmount = $this->getFeesAmount($fees_master) / 4;
-                            $feesChild->quater_one = $quarterAmount;
-                            $feesChild->quater_two = $quarterAmount;
-                            $feesChild->quater_three = $quarterAmount;
-                            $feesChild->quater_four = $quarterAmount;
-                        }
-                        $feesChild->fee_group = "2";
-                        $feesChild->save();
-                        $feesId = $feesChild->id;
-                        $months = DB::table('months_list')->get();
-                        foreach($months as $month){
-                            TransportMonth::create([
-                                'student_id' => $student_id,
-                                'fee_assign_children_id' => $feesId,
-                                'user_id' => Auth::id(),
-                                'month' => $month->id,
-                                'amount' => $this->getFeesAmount($fees_master)/10,
-                                'status' => '1',
-                                'state' => '1'
-                            ]);
-                        }
-                    } else {
-                        return $this->responseWithError('Fees has already been assigned', []);
-                    }
-                }
-            }
-        }
             DB::commit();
             return $this->responseWithSuccess(___('alert.created_successfully'), []);
         } catch (\Throwable $th) {
@@ -612,11 +465,26 @@ class StudentRepository implements StudentInterface
     {
         $request->validate([
             'document_files' => 'required|mimes:xlsx,xls,csv',
-            'document_format' => 'nullable|in:1,2',
+            'document_format' => 'nullable|in:1,2,3',
         ]);
 
-        if ((string) $request->input('document_format', '1') === '2') {
-            return $this->uploadFormatTwo($request);
+        $format = (string) $request->input('document_format', '1');
+        if ($format === '2') {
+            return $this->uploadQuickBooksFormat($request);
+        }
+        if ($format === '3') {
+            return $this->uploadCrdbFormat($request);
+        }
+
+        // New "Normal Excel" supports explicit school/transport/outstanding columns.
+        $peek = Excel::toArray(new StudentsImport, $request->file('document_files'));
+        $firstRow = $peek[0][0] ?? [];
+        if ($this->hasAnyKey($firstRow, [
+            'school_fees_amount',
+            'transport_fees_amount',
+            'outstanding_fees_amount',
+        ])) {
+            return $this->uploadNormalExcel($request);
         }
 
         DB::beginTransaction();
@@ -838,6 +706,14 @@ class StudentRepository implements StudentInterface
                         $member->category_id = "1";
                         $member->status = "1";
                         $member->save();
+                    }
+
+                    $feeCatIdForRow = $this->normalizeStudentCategoryIdForFees($category_id ?? null);
+                    if ($this->isBoardingStudentCategory($feeCatIdForRow)) {
+                        $this->syncAutoSchoolFeeFromBoardingCategoryForStudent((int) $student_id, (int) $classesStore_id, $sectionStore_id, $feeCatIdForRow);
+                    } else {
+                        $this->syncAutoSchoolFeeFromClassForStudent((int) $student_id, (int) $classesStore_id, $sectionStore_id, $feeCatIdForRow);
+                        $this->syncAutoTransportFeeFromCategoryForStudent((int) $student_id, (int) $classesStore_id, $sectionStore_id, $feeCatIdForRow);
                     }
 
                     if (empty($this->checkIfOutstandingBalanceExist())) {
@@ -1450,37 +1326,6 @@ class StudentRepository implements StudentInterface
                 }
             }
 
-                if (str_contains($row['category'], "BOARDING")) {
-                    $feeAmount = $row['fees_amount']; // Assign as an integer
-                    
-                    // Fetch the ID
-                    $result = DB::select("SELECT fees_assign_childrens.id FROM fees_assign_childrens 
-                                          INNER JOIN fees_assigns 
-                                          ON fees_assign_childrens.fees_assign_id = fees_assigns.id 
-                                          WHERE fees_assigns.fees_group_id = ? and fees_assign_childrens.student_id = ? ", [2, $student_id ]);
-                
-                    // Ensure there's a result
-                    if (!empty($result)) {
-                        $id = $result[0]->id; // Extract the first ID
-                        
-                        // Find the record and update it
-                        $feesChield = FeesAssignChildren::findOrFail($id);
-                        $feesChield->fees_master_id = 20; // Update the fees_master_id
-                         $feesChield->fees_amount = $row['fees_amount']??'0';
-                        $feesChield->paid_amount = $row['paid_amount']??'0';
-                        $feesChield->remained_amount = $row['current']??'0';
-                        $feesChield->quater_one = $feeAmount / 4;
-                        $feesChield->quater_two = $feeAmount / 4;
-                        $feesChield->quater_three = $feeAmount / 4;
-                        $feesChield->quater_four = $feeAmount / 4;
-                        $feesChield->save();
-                    } else {
-                        // Handle the case where no records are found
-                        // throw new Exception("No records found for the specified fees_group_id.");
-                    }
-                }
-                  
-
                 }else{
                     return $this->responseWithSuccess(___('alert.created_successfully'), []);
                 }
@@ -2015,7 +1860,7 @@ class StudentRepository implements StudentInterface
     }
 
     /**
-     * Upload handler for Excel Format 2 (class assignment only, no fees assignment).
+     * Upload handler for Excel Format 2 (class/section assignment; school + transport from class/category + pivot).
      */
     private function uploadFormatTwo($request)
     {
@@ -2216,12 +2061,766 @@ class StudentRepository implements StudentInterface
                     $member->status = "1";
                     $member->save();
                 }
+
+                $feeCatIdF2 = $this->normalizeStudentCategoryIdForFees($category_id);
+                if ($this->isBoardingStudentCategory($feeCatIdF2)) {
+                    $this->syncAutoSchoolFeeFromBoardingCategoryForStudent((int) $student_id, (int) $classesStore_id, $sectionStore_id, $feeCatIdF2);
+                } else {
+                    $this->syncAutoSchoolFeeFromClassForStudent((int) $student_id, (int) $classesStore_id, $sectionStore_id, $feeCatIdF2);
+                    $this->syncAutoTransportFeeFromCategoryForStudent((int) $student_id, (int) $classesStore_id, $sectionStore_id, $feeCatIdF2);
+                }
             }
 
             DB::commit();
             return $this->responseWithSuccess(___('alert.created_successfully'), []);
         } catch (\Throwable $th) {
             DB::rollback();
+            Log::error($th);
+            return $this->responseWithError(___('alert.something_went_wrong_please_try_again'), []);
+        }
+    }
+
+    private function uploadNormalExcel($request)
+    {
+        DB::beginTransaction();
+        try {
+            $data = Excel::toArray(new StudentsImport, $request->file('document_files'));
+            $processed = 0;
+            $skipped = 0;
+
+            foreach (($data[0] ?? []) as $row) {
+                if (empty(array_filter($row))) {
+                    continue;
+                }
+
+                $studentName = trim((string) $this->getRowValue($row, ['student_name', 'student', 'studentname'], ''));
+                $className = trim((string) $this->getRowValue($row, ['class', 'class_name'], ''));
+                if ($studentName === '' || $className === '') {
+                    $skipped++;
+                    continue;
+                }
+
+                $payload = [
+                    'student_name' => $studentName,
+                    'class' => $className,
+                    'section' => trim((string) $this->getRowValue($row, ['section', 'stream_combination', 'stream_comb', 'stream'], 'A')),
+                    'gender' => trim((string) $this->getRowValue($row, ['gender'], 'Male')),
+                    'admission_no' => trim((string) $this->getRowValue($row, ['admission_no', 'admission'], '')),
+                    'parent_name' => trim((string) $this->getRowValue($row, ['parent_name', 'guardian_name'], '')),
+                    'phone_number' => trim((string) $this->getRowValue($row, ['phone_number', 'parent_mobile', 'mobile'], '')),
+                    'email' => trim((string) $this->getRowValue($row, ['email', 'parent_email'], '')),
+                    'category' => trim((string) $this->getRowValue($row, ['category'], 'Day')),
+                ];
+
+                $resolved = $this->resolveOrCreateStudentForImport($payload);
+                if (empty($resolved['student_id'])) {
+                    $skipped++;
+                    continue;
+                }
+
+                $schoolMasterId = (int) $this->getFeeMasterId($this->getFeeTypeId((int) $resolved['class_id']));
+                $transportMasterId = (int) ($this->resolveTransportFeesMasterId((int) $resolved['category_id']) ?? 0);
+                $outstandingMasterId = (int) ($this->ensureOutstandingFeesMasterId() ?? 0);
+
+                $this->upsertImportedFeeLine(
+                    (int) $resolved['student_id'],
+                    (int) $resolved['class_id'],
+                    (int) $resolved['section_id'],
+                    $schoolMasterId,
+                    $this->toAmount($this->getRowValue($row, ['school_fees_amount'], 0)),
+                    $this->toAmount($this->getRowValue($row, ['school_paid_amount'], 0)),
+                    $this->toAmount($this->getRowValue($row, ['school_remained_amount'], 0))
+                );
+
+                $this->upsertImportedFeeLine(
+                    (int) $resolved['student_id'],
+                    (int) $resolved['class_id'],
+                    (int) $resolved['section_id'],
+                    $transportMasterId,
+                    $this->toAmount($this->getRowValue($row, ['transport_fees_amount'], 0)),
+                    $this->toAmount($this->getRowValue($row, ['transport_paid_amount'], 0)),
+                    $this->toAmount($this->getRowValue($row, ['transport_remained_amount'], 0))
+                );
+
+                $outstandingChildId = $this->upsertImportedFeeLine(
+                    (int) $resolved['student_id'],
+                    (int) $resolved['class_id'],
+                    (int) $resolved['section_id'],
+                    $outstandingMasterId,
+                    $this->toAmount($this->getRowValue($row, ['outstanding_fees_amount'], 0)),
+                    $this->toAmount($this->getRowValue($row, ['outstanding_paid_amount'], 0)),
+                    $this->toAmount($this->getRowValue($row, ['outstanding_remained_amount'], 0))
+                );
+
+                $this->saveOutstandingDescriptions(
+                    (int) $resolved['student_id'],
+                    $outstandingChildId,
+                    $row,
+                    'normal_excel',
+                    $this->toAmount($this->getRowValue($row, ['outstanding_fees_amount'], 0))
+                );
+
+                $processed++;
+            }
+
+            DB::commit();
+            return $this->responseWithSuccess("Upload completed. Processed: {$processed}, Skipped: {$skipped}", []);
+        } catch (\Throwable $th) {
+            DB::rollback();
+            Log::error($th);
+            return $this->responseWithError(___('alert.something_went_wrong_please_try_again'), []);
+        }
+    }
+
+    private function uploadQuickBooksFormat($request)
+    {
+        DB::beginTransaction();
+        try {
+            $request->validate([
+                'class_id' => 'required',
+                'section_id' => 'required',
+                'fee_group_id' => 'required',
+                'fee_type_id' => 'nullable',
+            ]);
+
+            $feeGroupId = (int) $request->input('fee_group_id');
+            $pendingTransport = [];
+
+            $data = Excel::toArray(new StudentsImport, $request->file('document_files'));
+            $processed = 0;
+            $skipped = 0;
+
+            foreach (($data[0] ?? []) as $row) {
+                if (empty(array_filter($row))) continue;
+
+                $parsed = $this->parseQuickBooksName((string) $this->getRowValue($row, ['name'], ''));
+                $studentName = trim((string) ($parsed['student_name'] ?? ''));
+                if ($studentName === '') {
+                    $skipped++;
+                    continue;
+                }
+
+                $payload = [
+                    'student_name' => $studentName,
+                    'class' => $parsed['class_name'] ?: (string) DB::table('classes')->where('id', $request->input('class_id'))->value('name'),
+                    'section' => $parsed['section_name'] ?: (string) DB::table('sections')->where('id', $request->input('section_id'))->value('name'),
+                    'gender' => trim((string) $this->getRowValue($row, ['gender'], 'Male')),
+                    'admission_no' => '',
+                    'parent_name' => '',
+                    'phone_number' => '',
+                    'email' => '',
+                    'category' => 'Day',
+                ];
+                $resolved = $this->resolveOrCreateStudentForImport($payload);
+                if (empty($resolved['student_id'])) {
+                    $skipped++;
+                    continue;
+                }
+
+                $fee = $this->toAmount($this->getRowValue($row, ['amount'], 0));
+                $balance = $this->toAmount($this->getRowValue($row, ['open_balance', 'balance_amount'], 0));
+                $paid = max(0, $fee - $balance);
+
+                if ($feeGroupId === 3) {
+                    $pendingTransport[] = [
+                        'student_id' => (int) $resolved['student_id'],
+                        'student_name' => $studentName,
+                        'class_id' => (int) $resolved['class_id'],
+                        'class_name' => (string) DB::table('classes')->where('id', $resolved['class_id'])->value('name'),
+                        'section_id' => (int) $resolved['section_id'],
+                        'section_name' => (string) DB::table('sections')->where('id', $resolved['section_id'])->value('name'),
+                    ];
+                } else {
+                    $feesMasterId = $this->resolveFeesMasterForGroup((int) $resolved['class_id'], $feeGroupId, $request->input('fee_type_id'));
+                    if ($feesMasterId <= 0) {
+                        $skipped++;
+                        continue;
+                    }
+                    $childId = $this->upsertImportedFeeLine(
+                        (int) $resolved['student_id'],
+                        (int) $resolved['class_id'],
+                        (int) $resolved['section_id'],
+                        $feesMasterId,
+                        $fee,
+                        $paid,
+                        $balance
+                    );
+                    if ($feeGroupId === 1) {
+                        $this->saveOutstandingDescriptions(
+                            (int) $resolved['student_id'],
+                            $childId,
+                            $row,
+                            'quick_books',
+                            $balance
+                        );
+                    }
+                }
+                $processed++;
+            }
+
+            DB::commit();
+            return [
+                'status' => true,
+                'message' => "Quick Books upload completed. Processed: {$processed}, Skipped: {$skipped}",
+                'pending_transport' => $feeGroupId === 3 ? array_values($pendingTransport) : [],
+            ];
+        } catch (\Throwable $th) {
+            DB::rollback();
+            Log::error($th);
+            return $this->responseWithError(___('alert.something_went_wrong_please_try_again'), []);
+        }
+    }
+
+    private function uploadCrdbFormat($request)
+    {
+        DB::beginTransaction();
+        try {
+            $request->validate([
+                'fee_group_id' => 'required',
+                'fee_type_id' => 'nullable',
+            ]);
+            $feeGroupId = (int) $request->input('fee_group_id');
+            $pendingTransport = [];
+
+            $data = Excel::toArray(new StudentsImport, $request->file('document_files'));
+            $processed = 0;
+            $skipped = 0;
+            foreach (($data[0] ?? []) as $row) {
+                if (empty(array_filter($row))) continue;
+
+                $studentName = trim((string) $this->getRowValue($row, ['student_name'], ''));
+                $className = trim((string) $this->getRowValue($row, ['class'], ''));
+                $sectionName = trim((string) $this->getRowValue($row, ['stream_combination', 'stream', 'section'], ''));
+                if ($studentName === '' || $className === '') {
+                    $skipped++;
+                    continue;
+                }
+
+                $payload = [
+                    'student_name' => $studentName,
+                    'class' => $className,
+                    'section' => $sectionName !== '' ? $sectionName : (string) DB::table('sections')->where('id', $request->input('section_id'))->value('name'),
+                    'gender' => trim((string) $this->getRowValue($row, ['gender'], 'Male')),
+                    'admission_no' => trim((string) $this->getRowValue($row, ['admission_no'], '')),
+                    'parent_name' => '',
+                    'phone_number' => '',
+                    'email' => '',
+                    'category' => 'Day',
+                ];
+                $resolved = $this->resolveOrCreateStudentForImport($payload);
+                if (empty($resolved['student_id'])) {
+                    $skipped++;
+                    continue;
+                }
+
+                if ($feeGroupId === 3) {
+                    $pendingTransport[] = [
+                        'student_id' => (int) $resolved['student_id'],
+                        'student_name' => $studentName,
+                        'class_id' => (int) $resolved['class_id'],
+                        'class_name' => (string) DB::table('classes')->where('id', $resolved['class_id'])->value('name'),
+                        'section_id' => (int) $resolved['section_id'],
+                        'section_name' => (string) DB::table('sections')->where('id', $resolved['section_id'])->value('name'),
+                    ];
+                } else {
+                    $feesMasterId = $this->resolveFeesMasterForGroup((int) $resolved['class_id'], $feeGroupId, $request->input('fee_type_id'));
+                    if ($feesMasterId <= 0) {
+                        $skipped++;
+                        continue;
+                    }
+                    $childId = $this->upsertImportedFeeLine(
+                        (int) $resolved['student_id'],
+                        (int) $resolved['class_id'],
+                        (int) $resolved['section_id'],
+                        $feesMasterId,
+                        $this->toAmount($this->getRowValue($row, ['fee_amount'], 0)),
+                        $this->toAmount($this->getRowValue($row, ['paid_amount'], 0)),
+                        $this->toAmount($this->getRowValue($row, ['balance_amount', 'open_balance'], 0))
+                    );
+                    if ($feeGroupId === 1) {
+                        $this->saveOutstandingDescriptions(
+                            (int) $resolved['student_id'],
+                            $childId,
+                            $row,
+                            'crdb',
+                            $this->toAmount($this->getRowValue($row, ['balance_amount', 'open_balance'], 0))
+                        );
+                    }
+                }
+                $processed++;
+            }
+
+            DB::commit();
+            return [
+                'status' => true,
+                'message' => "CRDB upload completed. Processed: {$processed}, Skipped: {$skipped}",
+                'pending_transport' => $feeGroupId === 3 ? array_values($pendingTransport) : [],
+            ];
+        } catch (\Throwable $th) {
+            DB::rollback();
+            Log::error($th);
+            return $this->responseWithError(___('alert.something_went_wrong_please_try_again'), []);
+        }
+    }
+
+    private function hasAnyKey(array $row, array $keys): bool
+    {
+        foreach ($keys as $key) {
+            if (array_key_exists($key, $row)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private function toAmount($value): float
+    {
+        $raw = trim((string) $value);
+        if ($raw === '') return 0;
+        $raw = str_replace(',', '', $raw);
+        $n = (float) $raw;
+        return $n < 0 ? 0 : $n;
+    }
+
+    private function parseQuickBooksName(string $raw): array
+    {
+        $raw = trim(preg_replace('/\s+/', ' ', $raw));
+        if ($raw === '') return ['class_name' => '', 'section_name' => '', 'student_name' => ''];
+
+        $parts = explode(':', $raw, 2);
+        $left = trim($parts[0] ?? '');
+        $student = trim($parts[1] ?? $raw);
+        if ($left === '') {
+            return ['class_name' => '', 'section_name' => '', 'student_name' => $student];
+        }
+
+        $tokens = preg_split('/\s+/', $left);
+        $section = strtoupper((string) array_pop($tokens));
+        $className = trim(implode(' ', $tokens));
+        return [
+            'class_name' => $className !== '' ? $className : $left,
+            'section_name' => $section,
+            'student_name' => $student,
+        ];
+    }
+
+    private function resolveOrCreateStudentForImport(array $payload): array
+    {
+        $studentName = trim((string) ($payload['student_name'] ?? ''));
+        $className = trim((string) ($payload['class'] ?? ''));
+        $sectionName = trim((string) ($payload['section'] ?? 'A'));
+        $genderName = trim((string) ($payload['gender'] ?? 'Male'));
+        $admissionNo = trim((string) ($payload['admission_no'] ?? ''));
+        $parentName = trim((string) ($payload['parent_name'] ?? ''));
+        $phoneNumber = trim((string) ($payload['phone_number'] ?? ''));
+        $parentEmailRaw = trim((string) ($payload['email'] ?? ''));
+        $categoryName = trim((string) ($payload['category'] ?? 'Day'));
+
+        $nameParts = preg_split('/\s+/', preg_replace('/\s+/', ' ', $studentName));
+        $studentFirstName = $nameParts[0] ?? $studentName;
+        $studentLastName = count($nameParts) > 1 ? implode(' ', array_slice($nameParts, 1)) : $studentFirstName;
+        if ($parentName === '') {
+            $parentName = $studentLastName;
+        }
+
+        $normalizedPhone = $this->normalizePhoneNumber($phoneNumber);
+        $safeEmailBase = strtolower(trim($studentFirstName . $studentLastName));
+        $safeEmailBase = preg_replace('/[^a-z0-9]/', '', $safeEmailBase);
+        $parentEmail = strtolower($parentEmailRaw !== '' ? $parentEmailRaw : (($safeEmailBase !== '' ? $safeEmailBase : 'parent') . '@gmail.com'));
+
+        $classesStore_id = $this->getClassId($className);
+        if (empty($classesStore_id)) {
+            $classesStore = new Classes();
+            $classesStore->name = $className;
+            $classesStore->status = '1';
+            $classesStore->orders = '0';
+            $classesStore->save();
+            $classesStore_id = $classesStore->id;
+        }
+
+        $category_id = $this->getStudentCategory($categoryName);
+        if (empty($category_id)) {
+            $category = new StudentCategory();
+            $category->name = $categoryName;
+            $category->status = '1';
+            $category->save();
+            $category_id = $category->id;
+        }
+
+        $setup_id = $this->getClassSetupId($classesStore_id, setting('session'));
+        if (empty($setup_id)) {
+            $setup = new ClassSetup();
+            $setup->session_id = setting('session');
+            $setup->classes_id = $classesStore_id;
+            $setup->save();
+            $setup_id = $setup->id;
+        }
+
+        $sectionStore_id = $this->getSectionId($sectionName);
+        if (empty($sectionStore_id)) {
+            $sectionStore = new Section();
+            $sectionStore->name = $sectionName;
+            $sectionStore->status = '1';
+            $sectionStore->save();
+            $sectionStore_id = $sectionStore->id;
+        }
+
+        if (empty($this->getClassSetupChildren($setup_id, $sectionStore_id))) {
+            $section = new ClassSetupChildren();
+            $section->class_setup_id = $setup_id;
+            $section->section_id = $sectionStore_id;
+            $section->save();
+        }
+
+        $existingParentId = $this->getParentIdByPhone($phoneNumber);
+        $userIdByPhone = $this->getUserIdByPhone($phoneNumber);
+        $user_id = '';
+        if (!empty($existingParentId)) {
+            $parent = ParentGuardian::find($existingParentId);
+            $user_id = $parent->user_id ?? $this->getUserIdByParentId($existingParentId);
+        } elseif (!empty($userIdByPhone)) {
+            $user_id = $userIdByPhone;
+            $parentIdForUser = $this->getParentIdByUserId($user_id);
+            if (!empty($parentIdForUser)) {
+                $existingParentId = $parentIdForUser;
+            }
+        }
+
+        if ($user_id === '' || $user_id === null) {
+            if (empty($this->getUserId($parentEmail))) {
+                $role = Role::find(7);
+                $user = new User();
+                $user->name = $parentName;
+                $user->email = strtolower($parentEmail);
+                $user->phone = $normalizedPhone;
+                $user->password = Hash::make('12345678');
+                $user->email_verified_at = now();
+                $user->role_id = $role->id;
+                $user->permissions = $role->permissions;
+                $user->save();
+                $user_id = $user->id;
+            } else {
+                $user_id = $this->getUserId($parentEmail);
+            }
+        }
+
+        if (empty($existingParentId)) {
+            if (empty($this->getParentId(trim($parentEmail)))) {
+                $parent = new ParentGuardian();
+                $parent->user_id = $user_id;
+                $parent->guardian_name = $parentName;
+                $parent->guardian_email = strtolower($parentEmail);
+                $parent->guardian_mobile = $normalizedPhone;
+                $parent->status = '1';
+                $parent->save();
+                $parent_id = $parent->id;
+            } else {
+                $parent_id = $this->getParentId(trim($parentEmail));
+            }
+        } else {
+            $parent_id = $existingParentId;
+        }
+
+        $existingStudentIdByPhone = $this->getStudentIdByPhone($phoneNumber);
+        if (!empty($existingStudentIdByPhone)) {
+            $student_id = $existingStudentIdByPhone;
+            $student = Student::findOrFail($student_id);
+            $student->student_category_id = $category_id;
+            $student->category_id = $category_id;
+            if (!empty($normalizedPhone)) {
+                $student->mobile = $normalizedPhone;
+            }
+            $student->save();
+        } else if (empty($this->getStudentId($parent_id, $classesStore_id))) {
+            $student = new $this->model;
+            $student->user_id = $user_id;
+            $student->first_name = $studentFirstName;
+            $student->last_name = $studentLastName;
+            $student->admission_no = $admissionNo !== '' ? $admissionNo : null;
+            $student->roll_no = $this->generateUniqueTrackingNumber();
+            $student->mobile = $normalizedPhone;
+            $student->email = strtolower($parentEmail);
+            $student->gender_id = $this->getGenderId($genderName);
+            $student->admission_date = now()->format('Y-m-d');
+            $student->student_category_id = $category_id;
+            $student->parent_guardian_id = $parent_id;
+            $student->status = '1';
+            $student->category_id = $category_id;
+            $student->control_number = '00' . $this->generateUniquecONTROLNumber();
+            $student->save();
+            $student_id = $student->id;
+        } else {
+            $student_id = $this->getStudentId($parent_id, $classesStore_id);
+        }
+
+        if (empty($this->getSessionClassStudent($classesStore_id, setting('session'), $student_id))) {
+            $session_class = new SessionClassStudent();
+            $session_class->session_id = setting('session');
+            $session_class->classes_id = $classesStore_id;
+            $session_class->section_id = $sectionStore_id;
+            $session_class->student_id = $student_id;
+            $session_class->save();
+        } else {
+            $session_class_id = $this->getSessionClassStudent($classesStore_id, setting('session'), $student_id);
+            $sessionClass = SessionClassStudent::findOrFail($session_class_id);
+            $sessionClass->section_id = $sectionStore_id;
+            $sessionClass->save();
+        }
+
+        if (empty($this->getMemberId($student_id))) {
+            $member = new Member();
+            $member->user_id = $student_id;
+            $member->name = trim($studentFirstName . ' ' . $studentLastName);
+            $member->category_id = '1';
+            $member->status = '1';
+            $member->save();
+        }
+
+        return [
+            'student_id' => (int) $student_id,
+            'class_id' => (int) $classesStore_id,
+            'section_id' => (int) $sectionStore_id,
+            'category_id' => (int) $category_id,
+        ];
+    }
+
+    private function ensureOutstandingFeesMasterId(): ?int
+    {
+        $fees_group_id = $this->checkIfOutstandingBalanceExist();
+        if (empty($fees_group_id)) {
+            $rowFeesGroup = new FeesGroup();
+            $rowFeesGroup->name = 'Outstanding Balance';
+            $rowFeesGroup->description = 'Outstanding Balance';
+            $rowFeesGroup->status = '1';
+            $rowFeesGroup->online_admission_fees = 0;
+            $rowFeesGroup->save();
+            $fees_group_id = $rowFeesGroup->id;
+        }
+
+        $fee_type_id = $this->checkFeeType();
+        if (empty($fee_type_id)) {
+            $rowFeesType = new FeesType();
+            $rowFeesType->name = 'Outstanding Balance Fee';
+            $rowFeesType->code = '001';
+            $rowFeesType->description = 'Outstanding Balance Fee';
+            $rowFeesType->status = '1';
+            $rowFeesType->save();
+            $fee_type_id = $rowFeesType->id;
+        }
+
+        $fees_master_id = $this->checkFeeMaster($fees_group_id, $fee_type_id);
+        if (empty($fees_master_id)) {
+            $rowFeesMaster = new FeesMaster();
+            $rowFeesMaster->session_id = setting('session');
+            $rowFeesMaster->fees_group_id = $fees_group_id;
+            $rowFeesMaster->fees_type_id = $fee_type_id;
+            $rowFeesMaster->due_date = date('Y-12-31');
+            $rowFeesMaster->amount = '0';
+            $rowFeesMaster->fine_type = '0';
+            $rowFeesMaster->percentage = '0';
+            $rowFeesMaster->fine_amount = '0';
+            $rowFeesMaster->status = '1';
+            $rowFeesMaster->save();
+            $fees_master_id = $rowFeesMaster->id;
+        }
+
+        return $fees_master_id ? (int) $fees_master_id : null;
+    }
+
+    private function upsertImportedFeeLine(
+        int $studentId,
+        int $classId,
+        int $sectionId,
+        int $feesMasterId,
+        float $feesAmount,
+        float $paidAmount,
+        float $remainedAmount
+    ): ?int {
+        if ($feesMasterId <= 0) {
+            return null;
+        }
+        if ($feesAmount <= 0 && $paidAmount <= 0 && $remainedAmount <= 0) {
+            return null;
+        }
+
+        $feesGroupId = (int) DB::table('fees_masters')->where('id', $feesMasterId)->value('fees_group_id');
+        if ($feesGroupId <= 0) {
+            return null;
+        }
+        $feesAssignId = $this->resolveOrCreateFeesAssignIdForStudentFee($classId, $feesGroupId, $sectionId);
+        $childId = $this->checkFeesAssignChildren($feesAssignId, $feesMasterId, $studentId);
+        $controlNumber = $this->getStudentControlNumber($studentId);
+
+        $fee = max(0, $feesAmount);
+        $paid = max(0, $paidAmount);
+        $remain = max(0, $remainedAmount);
+
+        if (!empty($childId)) {
+            DB::table('fees_assign_childrens')
+                ->where('id', $childId)
+                ->update([
+                    'fees_amount' => $fee,
+                    'paid_amount' => $paid,
+                    'remained_amount' => $remain,
+                    'control_number' => $controlNumber,
+                    'updated_at' => now(),
+                ]);
+        } else {
+            $feesChild = new FeesAssignChildren();
+            $feesChild->fees_assign_id = $feesAssignId;
+            $feesChild->fees_master_id = $feesMasterId;
+            $feesChild->student_id = $studentId;
+            $feesChild->fees_amount = $fee;
+            $feesChild->paid_amount = $paid;
+            $feesChild->remained_amount = $remain;
+            $feesChild->control_number = $controlNumber;
+            $feesChild->fee_group = '2';
+            $feesChild->save();
+            $childId = $feesChild->id;
+        }
+
+        if ($feesGroupId === 3 && Schema::hasTable('months_list') && Schema::hasTable('transport_months')) {
+            $exists = DB::table('transport_months')->where('fee_assign_children_id', $childId)->exists();
+            if (! $exists) {
+                $months = DB::table('months_list')->get();
+                foreach ($months as $month) {
+                    TransportMonth::create([
+                        'student_id' => $studentId,
+                        'fee_assign_children_id' => $childId,
+                        'user_id' => $this->transportMonthUserId(),
+                        'month' => $month->id,
+                        'amount' => $fee > 0 ? ($fee / 10) : 0,
+                        'status' => '1',
+                        'state' => '1',
+                    ]);
+                }
+            }
+        }
+        return (int) $childId;
+    }
+
+    private function resolveFeesMasterForGroup(int $classId, int $feeGroupId, $selectedFeeTypeId): int
+    {
+        if ($feeGroupId === 2) {
+            $feeTypeId = (int) $this->getFeeTypeId($classId);
+            if ($feeTypeId <= 0) return 0;
+            return (int) DB::table('fees_masters')
+                ->where('fees_type_id', $feeTypeId)
+                ->where('session_id', setting('session'))
+                ->orderBy('id')
+                ->value('id');
+        }
+        if ($feeGroupId === 1) {
+            return (int) ($this->ensureOutstandingFeesMasterId() ?? 0);
+        }
+        $feeTypeId = (int) $selectedFeeTypeId;
+        if ($feeTypeId <= 0) return 0;
+        return (int) DB::table('fees_masters')
+            ->where('fees_type_id', $feeTypeId)
+            ->where('fees_group_id', $feeGroupId)
+            ->where('session_id', setting('session'))
+            ->orderBy('id')
+            ->value('id');
+    }
+
+    private function saveOutstandingDescriptions(
+        int $studentId,
+        ?int $feesAssignChildrenId,
+        array $row,
+        string $sourceFormat,
+        float $fallbackAmount
+    ): void {
+        if (!Schema::hasTable('outstanding_fee_descriptions')) {
+            return;
+        }
+
+        $entries = [];
+        for ($i = 1; $i <= 5; $i++) {
+            $description = trim((string) $this->getRowValue($row, [
+                "outstanding_description_{$i}",
+                "description_{$i}",
+            ], ''));
+            $amount = $this->toAmount($this->getRowValue($row, [
+                "outstanding_amount_{$i}",
+                "amount_{$i}",
+            ], 0));
+            if ($description !== '' || $amount > 0) {
+                $entries[] = ['line_no' => $i, 'description' => $description, 'amount' => $amount];
+            }
+        }
+
+        if (count($entries) === 0 && $fallbackAmount > 0) {
+            $entries[] = ['line_no' => 1, 'description' => 'Outstanding', 'amount' => $fallbackAmount];
+        }
+
+        DB::table('outstanding_fee_descriptions')
+            ->where('student_id', $studentId)
+            ->where('fees_assign_children_id', $feesAssignChildrenId)
+            ->delete();
+
+        foreach ($entries as $entry) {
+            DB::table('outstanding_fee_descriptions')->insert([
+                'student_id' => $studentId,
+                'fees_assign_children_id' => $feesAssignChildrenId,
+                'source_format' => $sourceFormat,
+                'line_no' => $entry['line_no'],
+                'description' => $entry['description'] !== '' ? $entry['description'] : null,
+                'amount' => $entry['amount'],
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+    }
+
+    public function assignTransportFeesFromUpload($request)
+    {
+        $request->validate([
+            'students' => 'required|array|min:1',
+            'students.*.student_id' => 'required|integer',
+            'students.*.category_id' => 'required|integer',
+        ]);
+
+        DB::beginTransaction();
+        try {
+            $assigned = 0;
+            foreach ((array) $request->input('students', []) as $row) {
+                $studentId = (int) ($row['student_id'] ?? 0);
+                $categoryId = (int) ($row['category_id'] ?? 0);
+                if ($studentId <= 0 || $categoryId <= 0) {
+                    continue;
+                }
+                $sessionClass = SessionClassStudent::query()
+                    ->where('session_id', setting('session'))
+                    ->where('student_id', $studentId)
+                    ->first();
+                if (! $sessionClass) {
+                    continue;
+                }
+                $feesMasterId = (int) ($this->resolveTransportFeesMasterId($categoryId) ?? 0);
+                if ($feesMasterId <= 0) {
+                    continue;
+                }
+                $amount = (float) $this->getFeesAmount($feesMasterId);
+                $this->upsertImportedFeeLine(
+                    $studentId,
+                    (int) $sessionClass->classes_id,
+                    (int) $sessionClass->section_id,
+                    $feesMasterId,
+                    $amount,
+                    0,
+                    $amount
+                );
+                DB::table('students')->where('id', $studentId)->update([
+                    'student_category_id' => $categoryId,
+                    'category_id' => $categoryId,
+                    'updated_at' => now(),
+                ]);
+                $assigned++;
+            }
+            DB::commit();
+            return ['status' => true, 'message' => "Transport fees assigned for {$assigned} students."];
+        } catch (\Throwable $th) {
+            DB::rollBack();
             Log::error($th);
             return $this->responseWithError(___('alert.something_went_wrong_please_try_again'), []);
         }
@@ -2405,7 +3004,12 @@ class StudentRepository implements StudentInterface
 
     public function show($id)
     {
-        return $this->model->find($id);
+        return DB::table('students')
+            ->join('student_categories', 'student_categories.id', '=', 'students.student_category_id')
+            ->join('genders', 'genders.id', '=', 'students.gender_id')
+            ->where('students.id', $id)
+            ->select('students.*', 'student_categories.name as student_category_name', 'genders.name as gender_name')
+            ->first();
     }
 
     public function update($request, $id)
@@ -2427,11 +3031,115 @@ class StudentRepository implements StudentInterface
 
 
             $row                      = $this->model->find($id);
-            // $user                     = User::where('id',$row->user_id)->first();
-            $parent                     = ParentGuardian::where('id',$request->parent)->first();
+            $receiver_account = trim((string) $request->mobile);
+            if ($receiver_account === '') {
+                DB::rollBack();
+                return [
+                    'status' => false,
+                    'message' => 'Parent mobile is required.',
+                ];
+            }
+            if (strpos($receiver_account, '0') === 0) {
+                $receiver_account = '+255' . substr($receiver_account, 1);
+            } elseif (strpos($receiver_account, '+255') === 0) {
+                // already normalized
+            } elseif (strpos($receiver_account, '255') === 0) {
+                $receiver_account = '+' . $receiver_account;
+            } else {
+                $receiver_account = '+255' . $receiver_account;
+            }
+            $request->merge(['mobile' => $receiver_account]);
+
+            $firstStudentName = trim(($request->first_name ?? '') . ' ' . ($request->last_name ?? ''));
+            $firstName = preg_replace('/\s+/', ' ', $firstStudentName);
+            $firstNameParts = explode(' ', trim($firstName));
+            $studentFirstName = $firstNameParts[0] ?? 'parent';
+            $studentSecondName = $firstNameParts[1] ?? '';
+            $lastNameToUse = $studentSecondName;
+            if (isset($firstNameParts[2]) && !empty($firstNameParts[2])) {
+                $lastNameToUse .= $firstNameParts[2];
+            }
+            $parentEmail = strtolower(!empty($request->email) ? $request->email : (trim($studentFirstName) . trim($lastNameToUse) . '@gmail.com'));
+
+            $existingParentId = $this->getParentIdByPhone($request->mobile);
+            if (!empty($existingParentId)) {
+                $parent = ParentGuardian::find($existingParentId);
+                $user_id = $parent->user_id;
+                $parent_id = $existingParentId;
+                $parent->father_mobile = $request->second_mobile ?? $parent->father_mobile;
+                $parent->guardian_name = $request->last_name;
+                $parent->guardian_email = $request->email;
+                $parent->guardian_mobile = $request->mobile;
+                $parent->save();
+                $user = User::find($user_id);
+                if ($user) {
+                    $user->name = $request->last_name;
+                    $user->email = $request->email;
+                    $user->phone = $request->mobile;
+                    $user->save();
+                }
+            } elseif (empty($this->getUserId($parentEmail))) {
+                $user_id = DB::SELECT("SELECT * FROM users where phone = ?", [$request->mobile]);
+                if (!empty($user_id)) {
+                    $user_id = $user_id[0]->id;
+                    $parent_id = DB::SELECT("SELECT * FROM parent_guardians WHERE user_id = ?", [$user_id]);
+                    if (!empty($parent_id)) {
+                        $parent_id = $parent_id[0]->id;
+                    } else {
+                        $parent = new ParentGuardian();
+                        $parent->user_id = $user_id;
+                        $parent->father_mobile = $request->second_mobile;
+                        $parent->guardian_name = $request->last_name;
+                        $parent->guardian_email = $request->email;
+                        $parent->guardian_mobile = $request->mobile;
+                        $parent->status = "1";
+                        $parent->save();
+                        $parent_id = $parent->id;
+                    }
+                } else {
+                    $role = Role::find(7);
+                    $user = new User();
+                    $user->name = $request->last_name;
+                    $user->email = $request->email;
+                    $user->phone = $request->mobile;
+                    $user->password = Hash::make('12345678');
+                    $user->email_verified_at = now();
+                    $user->role_id = $role->id;
+                    $user->permissions = $role->permissions;
+                    $user->save();
+                    $user_id = $user->id;
+
+                    $parent = new ParentGuardian();
+                    $parent->user_id = $user->id;
+                    $parent->father_mobile = $request->second_mobile;
+                    $parent->guardian_name = $request->last_name;
+                    $parent->guardian_email = $request->email;
+                    $parent->guardian_mobile = $request->mobile;
+                    $parent->status = "1";
+                    $parent->save();
+                    $parent_id = $parent->id;
+                }
+            } else {
+                $user_id = $this->getUserId($parentEmail);
+                $parentRecord = DB::SELECT("SELECT * FROM parent_guardians WHERE user_id = ?", [$user_id]);
+                if (!empty($parentRecord)) {
+                    $parent_id = $parentRecord[0]->id;
+                } else {
+                    $parent = new ParentGuardian();
+                    $parent->user_id = $user_id;
+                    $parent->father_mobile = $request->second_mobile;
+                    $parent->guardian_name = $request->last_name;
+                    $parent->guardian_email = $request->email;
+                    $parent->guardian_mobile = $request->mobile;
+                    $parent->status = "1";
+                    $parent->save();
+                    $parent_id = $parent->id;
+                }
+            }
+
             $row->first_name           = $request->first_name;
             $row->last_name            = $request->last_name;
-            $row->user_id              = $parent->user_id;
+            $row->user_id              = $user_id ?? $row->user_id;
             $row->admission_no         = $request->admission_no??NULL;
             $row->mobile               = $request->mobile??NULL;
             $row->email                = $request->email??NULL;
@@ -2439,13 +3147,33 @@ class StudentRepository implements StudentInterface
             $row->religion_id          = $request->religion != ""? $request->religion :  NULL;
             $row->gender_id            = $request->gender != ""? $request->gender :  NULL;
             $row->admission_date       = $request->admission_date??NULL;
-            $row->parent_guardian_id   = $request->parent != ""? $request->parent :  NULL;
+            $row->parent_guardian_id   = $parent_id != "" ? $parent_id : NULL;
             $row->previous_school = $request->previous_school ?? 0;
             $row->previous_school_info = $request->previous_school?$request->previous_school_info:null;
             $row->residance_address = $request->residance_address??NULL;
-            $row->status               = $request->status;
+            $row->status               = $this->normalizeStudentStatus($request->input('status'));
             $row->student_category_id  = $request->category != ""? $request->category :  NULL;
             $row->category_id  = $request->category != ""? $request->category :  NULL;
+            if ($request->has('roll_no')) {
+                $v = $request->input('roll_no');
+                $row->roll_no = ($v === '' || $v === null) ? null : $v;
+            }
+            if ($request->exists('blood_group')) {
+                $row->blood_group_id = $request->blood_group !== '' && $request->blood_group !== null ? $request->blood_group : null;
+            }
+            $row->place_of_birth = $request->place_of_birth ?? null;
+            $row->nationality = $request->nationality ?? null;
+            $row->cpr_no = $request->cpr_no ?? null;
+            $row->spoken_lang_at_home = $request->spoken_lang_at_home ?? null;
+            if ($request->exists('sms_send')) {
+                $row->sms_send = $request->sms_send;
+            }
+            if ($request->exists('sms_send_description')) {
+                $row->sms_send_description = $request->sms_send_description;
+            }
+            if ($request->filled('control_number')) {
+                $row->control_number = $request->control_number;
+            }
 
             $row->save();
 
@@ -2454,6 +3182,9 @@ class StudentRepository implements StudentInterface
             $session_class->section_id          = $request->section != ""? $request->section :  NULL;
             $session_class->student_id          = $row->id;
             $session_class->roll                = $request->admission_no;
+            if ($request->exists('shift_id')) {
+                $session_class->shift_id = $request->shift_id !== '' && $request->shift_id !== null ? $request->shift_id : null;
+            }
             $session_class->save();
 
 
@@ -2464,188 +3195,109 @@ class StudentRepository implements StudentInterface
                 ]);
             }
 
-            // Update transport fees when category changes (using category like in create)
-            if ($studentCategoryId != $request->category) {
-                // Get or find fees assign for transport (group 3) for the current class
-                $feeAssignResult = DB::select('SELECT id FROM fees_assigns WHERE classes_id = ? AND session_id = ? AND fees_group_id = ?',
-                     [$request->class, setting('session'), "3"]);
-                
-                if (!empty($feeAssignResult)) {
-                    $feeAssignId = $feeAssignResult[0]->id;
-                    
-                    // Get transport profile from new category (same logic as create)
-                    $newTransportProfile = DB::select("
-                        SELECT name 
-                        FROM student_categories
-                        WHERE id = ?
-                    ", [$request->category]);
-                    
-                    $newFeeTypeId = 0;
-                    $newFeesMaster = null;
-                    
-                    if (!empty($newTransportProfile) && !empty($newTransportProfile[0]->name)) {
-                        $transportProfileName = $newTransportProfile[0]->name;
-                        // Split transport profile based on 'DAY'
-                        $transportProfileParts = explode(' DAY ', $transportProfileName);
-                        
-                        if (!empty($transportProfileParts[1])) {
-                            // Get fee type ID based on transport profile part
-                            $feeTypeResult = DB::select("
-                                SELECT id 
-                                FROM fees_types 
-                                WHERE code = ?
-                            ", [trim($transportProfileParts[1])]);
-                            
-                            if (!empty($feeTypeResult)) {
-                                $newFeeTypeId = $feeTypeResult[0]->id;
-                                
-                                // Get fees master ID based on fee type ID and session (2026)
-                                $feesMasterResult = DB::select("
-                                    SELECT id 
-                                    FROM fees_masters 
-                                    WHERE fees_type_id = ? AND session_id = ?
-                                ", [$newFeeTypeId, setting('session')]);
-                                
-                                if (!empty($feesMasterResult)) {
-                                    $newFeesMaster = $feesMasterResult[0]->id;
-                                }
-                            }
+            // Category change: non-boarding = class school + transport (pivot); BOARDING = category-mapped school fee only, no transport
+            $newCatForFees = $this->normalizeStudentCategoryIdForFees($request->category);
+            $oldCatForFees = $this->normalizeStudentCategoryIdForFees($studentCategoryId);
+            if ($oldCatForFees !== $newCatForFees) {
+                if ($this->isBoardingStudentCategory($newCatForFees)) {
+                    $this->deleteUnpaidTransportAssignmentsForStudent((int) $id, (int) setting('session'));
+                    $this->deleteUnpaidSchoolFeesForStudentForClass((int) $id, (int) $request->class, $request->section);
+                    if ($this->isBoardingStudentCategory($oldCatForFees)) {
+                        $oldBoardingMaster = $this->resolveBoardingSchoolFeesMasterId($oldCatForFees);
+                        if ($oldBoardingMaster) {
+                            $this->archiveAndDeleteUnpaidFeesChildrenForFeesMaster((int) $id, (int) $oldBoardingMaster, 'student_edit_category_boarding_change');
                         }
                     }
-                    
-                    // Update existing or create new transport fees assign children when category has transport
-                    if ($newFeeTypeId != 0 && !empty($newFeesMaster)) {
-                        // Find existing transport fees assign children for this student
-                        $existingTransportFee = DB::table('fees_assign_childrens')
-                            ->join('fees_assigns', 'fees_assigns.id', '=', 'fees_assign_childrens.fees_assign_id')
-                            ->where('fees_assign_childrens.student_id', $id)
-                            ->where('fees_assigns.fees_group_id', 3)
-                            ->where('fees_assigns.session_id', setting('session'))
-                            ->select('fees_assign_childrens.id', 'fees_assign_childrens.fees_master_id')
-                            ->first();
-                        
-                        if ($existingTransportFee) {
-                            // Update the fees master ID to the new one based on category
-                            DB::table('fees_assign_childrens')
-                                ->where('id', $existingTransportFee->id)
-                                ->update([
-                                    'fees_master_id' => $newFeesMaster,
-                                    'fees_amount' => $this->getFeesAmount($newFeesMaster),
-                                    'remained_amount' => $this->getFeesAmount($newFeesMaster),
-                                ]);
-                            
-                            // Update quarters if due date allows
-                            if ($this->getDueDate($newFeesMaster) > 8) {
-                                $quarterAmount = $this->getFeesAmount($newFeesMaster) / 4;
-                                DB::table('fees_assign_childrens')
-                                    ->where('id', $existingTransportFee->id)
-                                    ->update([
-                                        'quater_one' => $quarterAmount,
-                                        'quater_two' => $quarterAmount,
-                                        'quater_three' => $quarterAmount,
-                                        'quater_four' => $quarterAmount,
-                                    ]);
-                            }
-                        } else {
-                            // Category changed to a transport category but student had no transport fee: create it (same as store)
-                            $feeAssignChildren = DB::select('
-                                SELECT id FROM fees_assign_childrens
-                                WHERE fees_assign_id = ? AND fees_master_id = ? AND student_id = ?
-                            ', [$feeAssignId, $newFeesMaster, $id]);
-                            if (empty($feeAssignChildren)) {
-                                $controlNumber = $this->getStudentControlNumber($id);
-                                if (!empty($controlNumber)) {
-                                    $feesChild = new FeesAssignChildren();
-                                    $feesChild->fees_assign_id = $feeAssignId;
-                                    $feesChild->fees_master_id = $newFeesMaster;
-                                    $feesChild->student_id = $id;
-                                    $feesChild->fees_amount = $this->getFeesAmount($newFeesMaster);
-                                    $feesChild->remained_amount = $this->getFeesAmount($newFeesMaster);
-                                    $feesChild->control_number = $controlNumber;
-                                    if ($this->getDueDate($newFeesMaster) > 8) {
-                                        $quarterAmount = $this->getFeesAmount($newFeesMaster) / 4;
-                                        $feesChild->quater_one = $quarterAmount;
-                                        $feesChild->quater_two = $quarterAmount;
-                                        $feesChild->quater_three = $quarterAmount;
-                                        $feesChild->quater_four = $quarterAmount;
-                                    }
-                                    $feesChild->fee_group = "2";
-                                    $feesChild->save();
-                                    $feesId = $feesChild->id;
-                                    $months = DB::table('months_list')->get();
-                                    foreach ($months as $month) {
-                                        TransportMonth::create([
-                                            'student_id' => $id,
-                                            'fee_assign_children_id' => $feesId,
-                                            'user_id' => Auth::id(),
-                                            'month' => $month->id,
-                                            'amount' => $this->getFeesAmount($newFeesMaster) / 10,
-                                            'status' => '1',
-                                            'state' => '1'
-                                        ]);
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        // New category has no transport profile: remove existing transport fee if any
-                        $existingTransportFee = DB::table('fees_assign_childrens')
-                            ->join('fees_assigns', 'fees_assigns.id', '=', 'fees_assign_childrens.fees_assign_id')
-                            ->where('fees_assign_childrens.student_id', $id)
-                            ->where('fees_assigns.fees_group_id', 3)
-                            ->where('fees_assigns.session_id', setting('session'))
-                            ->select('fees_assign_childrens.id')
-                            ->first();
-                        if ($existingTransportFee) {
-                            DB::table('fees_assign_childrens')->where('id', $existingTransportFee->id)->delete();
+                    $this->syncAutoSchoolFeeFromBoardingCategoryForStudent((int) $id, (int) $request->class, $request->section, $newCatForFees);
+                } else {
+                    if ($this->isBoardingStudentCategory($oldCatForFees)) {
+                        $oldBoardingMaster = $this->resolveBoardingSchoolFeesMasterId($oldCatForFees);
+                        if ($oldBoardingMaster) {
+                            $this->archiveAndDeleteUnpaidFeesChildrenForFeesMaster((int) $id, (int) $oldBoardingMaster, 'student_edit_category_left_boarding');
                         }
                     }
+                    $this->pruneSchoolFeeIfCategoryDisallowed((int) $id, (int) $request->class, $request->section, $newCatForFees);
+                    $this->syncTransportFeeOnStudentCategoryUpdate((int) $id, (int) $request->class, $request->section, $newCatForFees);
+                    $this->syncAutoSchoolFeeFromClassForStudent((int) $id, (int) $request->class, $request->section, $newCatForFees);
                 }
             }
 
 
 
-            // Update school fees when class changes (using class like in create)
+            // Class change: non-boarding uses class-linked fee type; BOARDING keeps category-mapped school master and relocates assign
             if ($studentClass != $request->class) {
-                // Get fee type ID for the NEW class (same logic as create)
-                $newFeesTypeId = $this->getFeeTypeId($request->class);
-                
-                if (!empty($newFeesTypeId)) {
-                    // Get fees master ID for the new class (filters by session automatically now)
-                    $newFeesMasterId = $this->getFeeMasterId($newFeesTypeId);
-                    
-                    if (!empty($newFeesMasterId)) {
-                        // Get or find fees assign for the new class
-                        $newFeesGroupId = $this->getFeeGroupId($newFeesTypeId);
-                        $newFeesAssignId = $this->checkFeesAssign($request->class, $newFeesGroupId, $request->section);
-                        
-                        if (!empty($newFeesAssignId)) {
-                            // Find existing school fees assign children for this student (group 2)
-                            $existingSchoolFee = DB::table('fees_assign_childrens')
-                                ->join('fees_assigns', 'fees_assigns.id', '=', 'fees_assign_childrens.fees_assign_id')
-                                ->where('fees_assign_childrens.student_id', $id)
-                                ->where('fees_assigns.fees_group_id', 2)
-                                ->where('fees_assigns.session_id', setting('session'))
-                                ->select('fees_assign_childrens.id')
-                                ->first();
-                            
-                            if ($existingSchoolFee) {
-                                // Update the fees assign and fees master to the new class
-                                DB::table('fees_assign_childrens')
-                                    ->where('id', $existingSchoolFee->id)
-                                    ->update([
-                                        'fees_assign_id' => $newFeesAssignId,
-                                        'fees_master_id' => $newFeesMasterId,
-                                        'fees_amount' => $this->getFeeMasterAmount($newFeesMasterId) / 2,
-                                        'remained_amount' => $this->getFeeMasterAmount($newFeesMasterId) / 2,
-                                        'quater_one' => '0',
-                                        'quater_two' => '0',
-                                        'quater_three' => ($this->getFeeMasterAmount($newFeesMasterId) / 2) / 2,
-                                        'quater_four' => ($this->getFeeMasterAmount($newFeesMasterId) / 2) / 2,
-                                    ]);
+                $newCatForFees = $this->normalizeStudentCategoryIdForFees($request->category);
+
+                if ($this->isBoardingStudentCategory($newCatForFees)) {
+                    $this->relocateBoardingSchoolFeeOnClassChange(
+                        (int) $id,
+                        (int) $studentClass,
+                        $studentSection,
+                        (int) $request->class,
+                        $request->section,
+                        $newCatForFees
+                    );
+                    $this->deleteUnpaidTransportAssignmentsForStudentInClass((int) $id, (int) $studentClass, (int) setting('session'));
+                } else {
+                    $newFeesTypeId = $this->getFeeTypeId($request->class);
+
+                    if (! empty($newFeesTypeId) && (int) $newFeesTypeId > 0) {
+                        $newFeesMasterId = $this->getFeeMasterId($newFeesTypeId);
+
+                        if (! empty($newFeesMasterId)) {
+                            $newFeesGroupId = $this->getFeeGroupId($newFeesTypeId);
+                            $newFeesAssignId = $this->checkFeesAssign($request->class, $newFeesGroupId, $request->section);
+
+                            if (! empty($newFeesAssignId)) {
+                                $oldFeeTypeRaw = $this->getFeeTypeId($studentClass);
+                                $oldFeesGroupId = ($oldFeeTypeRaw !== '' && (int) $oldFeeTypeRaw > 0)
+                                    ? $this->getFeeGroupId((int) $oldFeeTypeRaw)
+                                    : null;
+
+                                $existingSchoolFee = null;
+                                if ($oldFeesGroupId !== null && $oldFeesGroupId !== '') {
+                                    $existingSchoolFee = DB::table('fees_assign_childrens as fac')
+                                        ->join('fees_assigns as fa', 'fa.id', '=', 'fac.fees_assign_id')
+                                        ->where('fac.student_id', $id)
+                                        ->where('fa.classes_id', $studentClass)
+                                        ->where('fa.fees_group_id', $oldFeesGroupId)
+                                        ->where('fa.session_id', setting('session'))
+                                        ->select('fac.id')
+                                        ->first();
+                                }
+
+                                if ($existingSchoolFee) {
+                                    DB::table('fees_assign_childrens')
+                                        ->where('id', $existingSchoolFee->id)
+                                        ->update([
+                                            'fees_assign_id' => $newFeesAssignId,
+                                            'fees_master_id' => $newFeesMasterId,
+                                            'fees_amount' => $this->getFeeMasterAmount($newFeesMasterId) / 2,
+                                            'remained_amount' => $this->getFeeMasterAmount($newFeesMasterId) / 2,
+                                            'quater_one' => '0',
+                                            'quater_two' => '0',
+                                            'quater_three' => ($this->getFeeMasterAmount($newFeesMasterId) / 2) / 2,
+                                            'quater_four' => ($this->getFeeMasterAmount($newFeesMasterId) / 2) / 2,
+                                        ]);
+                                } else {
+                                    $this->syncAutoSchoolFeeFromClassForStudent((int) $id, (int) $request->class, $request->section, $newCatForFees);
+                                }
+                            } else {
+                                // No class/group assign row yet for the new class: create + assign school fee via class mapping.
+                                $this->syncAutoSchoolFeeFromClassForStudent((int) $id, (int) $request->class, $request->section, $newCatForFees);
                             }
                         }
+                    } elseif ($newFeesTypeId !== '' && $newFeesTypeId !== null) {
+                        $this->deleteUnpaidSchoolFeesForStudentForClass((int) $id, (int) $studentClass, $studentSection);
                     }
+
+                    $this->deleteUnpaidTransportAssignmentsForStudentInClass((int) $id, (int) $studentClass, (int) setting('session'));
+                    $this->syncAutoTransportFeeFromCategoryForStudent(
+                        (int) $id,
+                        (int) $request->class,
+                        $request->section,
+                        $newCatForFees
+                    );
                 }
 
                     //Update for the results that has been uploaded and a student has change a class
@@ -2661,7 +3313,7 @@ class StudentRepository implements StudentInterface
                                 ->where('student_id', $id)
                                 ->first();
 
-                            if ($markRow && !empty($markRegisterId)) {
+                            if ($markRow && !empty($marksRegisterId)) {
                                 $exam_type_id = $this->getExamType($marksRegisterId);
                                 $subject_id = $this->getSubjectId($marksRegisterId);
                                 $currentMarksRegisterIds = $this->getMarksRegisterIdDetails($request->class, $request->section,$exam_type_id,$subject_id);
@@ -2710,9 +3362,27 @@ class StudentRepository implements StudentInterface
             return $this->responseWithSuccess(___('alert.updated_successfully'), []);
         } catch (\Throwable $th) {
             DB::rollback();
-            dd($th);
+            Log::error('StudentRepository::update failed', [
+                'message' => $th->getMessage(),
+                'student_id' => $id,
+                'exception' => $th,
+            ]);
+
             return $this->responseWithError(___('alert.something_went_wrong_please_try_again'), []);
         }
+    }
+
+    /**
+     * Persist 0/1 only. SPA historically sent 2 for inactive; listings use status = 1 for active.
+     */
+    private function normalizeStudentStatus($status): string
+    {
+        $s = $status === null || $status === '' ? '1' : (string) $status;
+        if ($s === '2') {
+            return '0';
+        }
+
+        return ($s === '0' || $s === '1') ? $s : '1';
     }
 
     private function getMarksRegisterId($class,$section)
@@ -3199,6 +3869,581 @@ private function getStudentIdByName($student_name, $class,$section)
         }
     }
 
+    /**
+     * School fee type comes from fees_types.class_id (class). Optional pivot restricts by student category.
+     */
+    private function feesTypeAllowsStudentCategory(int $feeTypeId, ?int $studentCategoryId): bool
+    {
+        if (! Schema::hasTable('fees_type_student_category')) {
+            return true;
+        }
+
+        $restricted = DB::table('fees_type_student_category')
+            ->where('fees_type_id', $feeTypeId)
+            ->exists();
+
+        if (! $restricted) {
+            return true;
+        }
+
+        if ($studentCategoryId === null) {
+            return false;
+        }
+
+        return DB::table('fees_type_student_category')
+            ->where('fees_type_id', $feeTypeId)
+            ->where('student_category_id', $studentCategoryId)
+            ->exists();
+    }
+
+    private function normalizeStudentCategoryIdForFees($value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        $n = (int) $value;
+
+        return $n > 0 ? $n : null;
+    }
+
+    /**
+     * Persist removed fees_assign_children rows when editing a student (table: delete_student).
+     */
+    private function archiveFeesAssignChildToDeleteStudent(int $studentId, int $childId, string $context): void
+    {
+        if (! Schema::hasTable('delete_student')) {
+            return;
+        }
+
+        $row = DB::table('fees_assign_childrens')->where('id', $childId)->first();
+        if (! $row) {
+            return;
+        }
+
+        $arr = (array) $row;
+        DB::table('delete_student')->insert([
+            'student_id' => $studentId,
+            'context' => substr($context, 0, 120),
+            'original_fees_assign_children_id' => $row->id,
+            'fees_assign_id' => $row->fees_assign_id ?? null,
+            'fees_master_id' => $row->fees_master_id ?? null,
+            'fees_amount' => $row->fees_amount ?? null,
+            'paid_amount' => $row->paid_amount ?? null,
+            'remained_amount' => $row->remained_amount ?? null,
+            'row_json' => json_encode($arr),
+            'archived_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    private function isBoardingStudentCategory(?int $studentCategoryId): bool
+    {
+        if ($studentCategoryId === null) {
+            return false;
+        }
+
+        $name = DB::table('student_categories')->where('id', $studentCategoryId)->value('name');
+
+        return $name !== null && str_contains(strtoupper((string) $name), 'BOARDING');
+    }
+
+    /**
+     * Boarding school fee: fee type linked to the boarding category in fees_type_student_category (non-transport master).
+     */
+    private function resolveBoardingSchoolFeesMasterId(?int $studentCategoryId): ?int
+    {
+        if (! $this->isBoardingStudentCategory($studentCategoryId)) {
+            return null;
+        }
+
+        if (! Schema::hasTable('fees_type_student_category')) {
+            return null;
+        }
+
+        $feeTypeId = DB::table('fees_type_student_category')
+            ->where('student_category_id', $studentCategoryId)
+            ->value('fees_type_id');
+
+        if (! $feeTypeId) {
+            return null;
+        }
+
+        $sessionId = (int) setting('session');
+        $id = DB::table('fees_masters')
+            ->where('fees_type_id', $feeTypeId)
+            ->where('session_id', $sessionId)
+            ->where('fees_group_id', '!=', '3')
+            ->orderBy('id')
+            ->value('id');
+
+        return $id ? (int) $id : null;
+    }
+
+    private function syncAutoSchoolFeeFromBoardingCategoryForStudent(int $studentId, int $classId, $sectionId, ?int $studentCategoryId): void
+    {
+        if (! $this->isBoardingStudentCategory($studentCategoryId)) {
+            return;
+        }
+
+        $feesMasterId = $this->resolveBoardingSchoolFeesMasterId($studentCategoryId);
+        if ($feesMasterId === null) {
+            Log::info('StudentRepository: skip boarding school fee — no fee master mapped for category', [
+                'student_id' => $studentId,
+                'student_category_id' => $studentCategoryId,
+            ]);
+
+            return;
+        }
+
+        $feesGroupId = DB::table('fees_masters')->where('id', $feesMasterId)->value('fees_group_id');
+        if ($feesGroupId === null || $feesGroupId === '') {
+            return;
+        }
+
+        $feesAssignId = $this->resolveOrCreateFeesAssignIdForStudentFee($classId, $feesGroupId, $sectionId);
+
+        $quaters = $this->getFeeMasterAmount($feesMasterId) / 4;
+        if (empty($this->checkFeesAssignChildren($feesAssignId, $feesMasterId, $studentId))) {
+            $feesChield = new FeesAssignChildren();
+            $feesChield->fees_assign_id = $feesAssignId;
+            $feesChield->fees_master_id = $feesMasterId;
+            $feesChield->student_id = $studentId;
+            $feesChield->fees_amount = $this->getFeeMasterAmount($feesMasterId);
+            $feesChield->paid_amount = '0';
+            $feesChield->remained_amount = $this->getFeeMasterAmount($feesMasterId);
+            $feesChield->quater_one = $quaters;
+            $feesChield->quater_two = $quaters;
+            $feesChield->quater_three = $quaters;
+            $feesChield->quater_four = $quaters;
+            $feesChield->quater_amount = $quaters;
+            $feesChield->control_number = $this->getStudentControlNumber($studentId);
+            $feesChield->fee_group = '2';
+            $feesChield->save();
+        }
+    }
+
+    private function archiveAndDeleteUnpaidFeesChildrenForFeesMaster(int $studentId, int $feesMasterId, string $context): void
+    {
+        $q = FeesAssignChildren::query()
+            ->where('student_id', $studentId)
+            ->where('fees_master_id', $feesMasterId);
+
+        if (Schema::hasColumn('fees_assign_childrens', 'paid_amount')) {
+            $q->where(function ($sub) {
+                $sub->whereNull('paid_amount')->orWhere('paid_amount', 0);
+            });
+        }
+
+        foreach ($q->pluck('id') as $childId) {
+            $this->archiveFeesAssignChildToDeleteStudent($studentId, (int) $childId, $context);
+            TransportMonth::where('fee_assign_children_id', $childId)->delete();
+            DB::table('fees_assign_childrens')->where('id', $childId)->delete();
+        }
+    }
+
+    private function relocateBoardingSchoolFeeOnClassChange(
+        int $studentId,
+        int $oldClassId,
+        $oldSectionId,
+        int $newClassId,
+        $newSectionId,
+        ?int $boardingCategoryId
+    ): void {
+        if (! $this->isBoardingStudentCategory($boardingCategoryId)) {
+            return;
+        }
+
+        $feesMasterId = $this->resolveBoardingSchoolFeesMasterId($boardingCategoryId);
+        if (! $feesMasterId) {
+            return;
+        }
+
+        $feesGroupId = DB::table('fees_masters')->where('id', $feesMasterId)->value('fees_group_id');
+        if ($feesGroupId === null || $feesGroupId === '') {
+            return;
+        }
+
+        $child = DB::table('fees_assign_childrens as fac')
+            ->join('fees_assigns as fa', 'fa.id', '=', 'fac.fees_assign_id')
+            ->where('fac.student_id', $studentId)
+            ->where('fac.fees_master_id', $feesMasterId)
+            ->where('fa.session_id', setting('session'))
+            ->select('fac.id', 'fac.fees_assign_id')
+            ->first();
+
+        if (! $child) {
+            $this->syncAutoSchoolFeeFromBoardingCategoryForStudent($studentId, $newClassId, $newSectionId, $boardingCategoryId);
+
+            return;
+        }
+
+        $newFeesAssignId = $this->resolveOrCreateFeesAssignIdForStudentFee($newClassId, $feesGroupId, $newSectionId);
+
+        DB::table('fees_assign_childrens')
+            ->where('id', $child->id)
+            ->update(['fees_assign_id' => $newFeesAssignId]);
+    }
+
+    /**
+     * Transport fees_master for student category (fees_type_student_category + fees_masters fees_group 3).
+     */
+    private function resolveTransportFeesMasterId(?int $studentCategoryId): ?int
+    {
+        if (! Schema::hasTable('fees_type_student_category') || $studentCategoryId === null) {
+            return null;
+        }
+
+        $sessionId = (int) setting('session');
+        $id = DB::table('fees_masters as fm')
+            ->join('fees_type_student_category as ftsc', 'ftsc.fees_type_id', '=', 'fm.fees_type_id')
+            ->where('ftsc.student_category_id', $studentCategoryId)
+            ->where('fm.session_id', $sessionId)
+            ->where('fm.fees_group_id', '3')
+            ->orderBy('fm.id')
+            ->value('fm.id');
+
+        return $id ? (int) $id : null;
+    }
+
+    private function syncAutoSchoolFeeFromClassForStudent(int $studentId, int $classId, $sectionId, ?int $studentCategoryId): void
+    {
+        if ($this->isBoardingStudentCategory($studentCategoryId)) {
+            return;
+        }
+
+        $feeTypeRaw = $this->getFeeTypeId($classId);
+        if ($feeTypeRaw === '' || $feeTypeRaw === null || (int) $feeTypeRaw <= 0) {
+            return;
+        }
+
+        $feeTypeId = (int) $feeTypeRaw;
+
+        $feesGroupId = $this->getFeeGroupId($feeTypeId);
+        if ($feesGroupId === '' || $feesGroupId === null) {
+            return;
+        }
+
+        // School fee follows class-linked fee type only; category pivot is for transport (`syncAutoTransportFeeFromCategoryForStudent`).
+        if ((string) $feesGroupId === '3') {
+            Log::warning('StudentRepository: class maps to fees_group_id=3 (transport); skip class school sync — check fees_types.class_id', [
+                'student_id' => $studentId,
+                'fee_type_id' => $feeTypeId,
+                'class_id' => $classId,
+            ]);
+
+            return;
+        }
+
+        $feesMasterId = $this->getFeeMasterId($feeTypeId);
+        if ($feesMasterId === '' || $feesMasterId === null) {
+            return;
+        }
+
+        $feesAssignId = $this->resolveOrCreateFeesAssignIdForStudentFee($classId, $feesGroupId, $sectionId);
+
+        $quaters = $this->getFeeMasterAmount($feesMasterId) / 4;
+        if (empty($this->checkFeesAssignChildren($feesAssignId, $feesMasterId, $studentId))) {
+            $feesChield = new FeesAssignChildren();
+            $feesChield->fees_assign_id = $feesAssignId;
+            $feesChield->fees_master_id = $feesMasterId;
+            $feesChield->student_id = $studentId;
+            $feesChield->fees_amount = $this->getFeeMasterAmount($feesMasterId);
+            $feesChield->paid_amount = '0';
+            $feesChield->remained_amount = $this->getFeeMasterAmount($feesMasterId);
+            $feesChield->quater_one = $quaters;
+            $feesChield->quater_two = $quaters;
+            $feesChield->quater_three = $quaters;
+            $feesChield->quater_four = $quaters;
+            $feesChield->quater_amount = $quaters;
+            $feesChield->control_number = $this->getStudentControlNumber($studentId);
+            $feesChield->fee_group = '2';
+            $feesChield->save();
+        }
+    }
+
+    /**
+     * Create transport fees_assign_child from category ↔ fee type pivot (no duplicate for same master).
+     */
+    private function syncAutoTransportFeeFromCategoryForStudent(int $studentId, int $classId, $sectionId, ?int $studentCategoryId): void
+    {
+        if ($this->isBoardingStudentCategory($studentCategoryId)) {
+            return;
+        }
+
+        $fees_master = $this->resolveTransportFeesMasterId($studentCategoryId);
+        if (! $fees_master) {
+            return;
+        }
+
+        $feeAssignId = $this->resolveOrCreateFeesAssignIdForStudentFee($classId, '3', $sectionId);
+
+        $feeAssignChildren = DB::select('
+            SELECT id 
+            FROM fees_assign_childrens 
+            WHERE fees_assign_id = ? AND fees_master_id = ? AND student_id = ?
+        ', [$feeAssignId, $fees_master, $studentId]);
+
+        if (! empty($feeAssignChildren)) {
+            return;
+        }
+
+        $controlNumber = $this->getStudentControlNumber($studentId);
+        if (empty($controlNumber)) {
+            return;
+        }
+
+        $feesChild = new FeesAssignChildren();
+        $feesChild->fees_assign_id = $feeAssignId;
+        $feesChild->fees_master_id = $fees_master;
+        $feesChild->student_id = $studentId;
+        $feesChild->fees_amount = $this->getFeesAmount($fees_master);
+        $feesChild->remained_amount = $this->getFeesAmount($fees_master);
+        $feesChild->control_number = $controlNumber;
+
+        if ($this->getDueDate($fees_master) > 8) {
+            $quarterAmount = $this->getFeesAmount($fees_master) / 4;
+            $feesChild->quater_one = $quarterAmount;
+            $feesChild->quater_two = $quarterAmount;
+            $feesChild->quater_three = $quarterAmount;
+            $feesChild->quater_four = $quarterAmount;
+        }
+        $feesChild->fee_group = '2';
+        $feesChild->save();
+        $feesId = $feesChild->id;
+        $months = DB::table('months_list')->get();
+        foreach ($months as $month) {
+            TransportMonth::create([
+                'student_id' => $studentId,
+                'fee_assign_children_id' => $feesId,
+                'user_id' => $this->transportMonthUserId(),
+                'month' => $month->id,
+                'amount' => $this->getFeesAmount($fees_master) / 10,
+                'status' => '1',
+                'state' => '1',
+            ]);
+        }
+    }
+
+    private function transportMonthUserId(): ?int
+    {
+        $uid = Auth::id();
+
+        return $uid !== null ? (int) $uid : null;
+    }
+
+    private function deleteUnpaidTransportAssignmentsForStudent(int $studentId, int $sessionId): void
+    {
+        $q = DB::table('fees_assign_childrens as fac')
+            ->join('fees_assigns as fa', 'fa.id', '=', 'fac.fees_assign_id')
+            ->where('fac.student_id', $studentId)
+            ->where('fa.fees_group_id', '3')
+            ->where('fa.session_id', $sessionId);
+
+        if (Schema::hasColumn('fees_assign_childrens', 'paid_amount')) {
+            $q->where(function ($sub) {
+                $sub->whereNull('fac.paid_amount')->orWhere('fac.paid_amount', 0);
+            });
+        }
+
+        $childIds = $q->select('fac.id')->get()->pluck('id');
+        foreach ($childIds as $childId) {
+            $this->archiveFeesAssignChildToDeleteStudent($studentId, (int) $childId, 'student_edit_remove_transport');
+            TransportMonth::where('fee_assign_children_id', $childId)->delete();
+            DB::table('fees_assign_childrens')->where('id', $childId)->delete();
+        }
+    }
+
+    /**
+     * Unpaid transport lines for this student under a specific class fees_assign (when student moves class).
+     */
+    private function deleteUnpaidTransportAssignmentsForStudentInClass(int $studentId, int $classId, int $sessionId): void
+    {
+        $q = DB::table('fees_assign_childrens as fac')
+            ->join('fees_assigns as fa', 'fa.id', '=', 'fac.fees_assign_id')
+            ->where('fac.student_id', $studentId)
+            ->where('fa.classes_id', $classId)
+            ->where('fa.fees_group_id', '3')
+            ->where('fa.session_id', $sessionId);
+
+        if (Schema::hasColumn('fees_assign_childrens', 'paid_amount')) {
+            $q->where(function ($sub) {
+                $sub->whereNull('fac.paid_amount')->orWhere('fac.paid_amount', 0);
+            });
+        }
+
+        $childIds = $q->select('fac.id')->get()->pluck('id');
+        foreach ($childIds as $childId) {
+            $this->archiveFeesAssignChildToDeleteStudent($studentId, (int) $childId, 'student_edit_remove_transport_class');
+            TransportMonth::where('fee_assign_children_id', $childId)->delete();
+            DB::table('fees_assign_childrens')->where('id', $childId)->delete();
+        }
+    }
+
+    /**
+     * On student category change: align transport fee line with pivot; remove if none.
+     */
+    private function syncTransportFeeOnStudentCategoryUpdate(int $studentId, int $classId, $sectionId, ?int $newCategoryId): void
+    {
+        $sessionId = (int) setting('session');
+
+        if ($this->isBoardingStudentCategory($newCategoryId)) {
+            $this->deleteUnpaidTransportAssignmentsForStudent($studentId, $sessionId);
+
+            return;
+        }
+
+        $newFeesMaster = $this->resolveTransportFeesMasterId($newCategoryId);
+
+        $feeAssignResult = DB::select('SELECT id FROM fees_assigns WHERE classes_id = ? AND session_id = ? AND fees_group_id = ?', [
+            $classId, $sessionId, '3',
+        ]);
+
+        if (empty($feeAssignResult)) {
+            if (! $newFeesMaster) {
+                return;
+            }
+            $row = new FeesAssign();
+            $row->session_id = $sessionId;
+            $row->classes_id = $classId;
+            $row->section_id = $sectionId;
+            $row->fees_group_id = '3';
+            $row->save();
+            $feeAssignId = $row->id;
+        } else {
+            $feeAssignId = $feeAssignResult[0]->id;
+        }
+
+        if (! $newFeesMaster) {
+            $this->deleteUnpaidTransportAssignmentsForStudent($studentId, $sessionId);
+
+            return;
+        }
+
+        $existingTransportFee = DB::table('fees_assign_childrens')
+            ->join('fees_assigns', 'fees_assigns.id', '=', 'fees_assign_childrens.fees_assign_id')
+            ->where('fees_assign_childrens.student_id', $studentId)
+            ->where('fees_assigns.fees_group_id', '3')
+            ->where('fees_assigns.session_id', $sessionId)
+            ->select('fees_assign_childrens.id', 'fees_assign_childrens.fees_master_id')
+            ->first();
+
+        if ($existingTransportFee) {
+            DB::table('fees_assign_childrens')
+                ->where('id', $existingTransportFee->id)
+                ->update([
+                    'fees_master_id' => $newFeesMaster,
+                    'fees_amount' => $this->getFeesAmount($newFeesMaster),
+                    'remained_amount' => $this->getFeesAmount($newFeesMaster),
+                ]);
+
+            if ($this->getDueDate($newFeesMaster) > 8) {
+                $quarterAmount = $this->getFeesAmount($newFeesMaster) / 4;
+                DB::table('fees_assign_childrens')
+                    ->where('id', $existingTransportFee->id)
+                    ->update([
+                        'quater_one' => $quarterAmount,
+                        'quater_two' => $quarterAmount,
+                        'quater_three' => $quarterAmount,
+                        'quater_four' => $quarterAmount,
+                    ]);
+            }
+
+            return;
+        }
+
+        $feeAssignChildren = DB::select('
+            SELECT id FROM fees_assign_childrens
+            WHERE fees_assign_id = ? AND fees_master_id = ? AND student_id = ?
+        ', [$feeAssignId, $newFeesMaster, $studentId]);
+
+        if (! empty($feeAssignChildren)) {
+            return;
+        }
+
+        $controlNumber = $this->getStudentControlNumber($studentId);
+        if (empty($controlNumber)) {
+            return;
+        }
+
+        $feesChild = new FeesAssignChildren();
+        $feesChild->fees_assign_id = $feeAssignId;
+        $feesChild->fees_master_id = $newFeesMaster;
+        $feesChild->student_id = $studentId;
+        $feesChild->fees_amount = $this->getFeesAmount($newFeesMaster);
+        $feesChild->remained_amount = $this->getFeesAmount($newFeesMaster);
+        $feesChild->control_number = $controlNumber;
+        if ($this->getDueDate($newFeesMaster) > 8) {
+            $quarterAmount = $this->getFeesAmount($newFeesMaster) / 4;
+            $feesChild->quater_one = $quarterAmount;
+            $feesChild->quater_two = $quarterAmount;
+            $feesChild->quater_three = $quarterAmount;
+            $feesChild->quater_four = $quarterAmount;
+        }
+        $feesChild->fee_group = '2';
+        $feesChild->save();
+        $feesId = $feesChild->id;
+        $months = DB::table('months_list')->get();
+        foreach ($months as $month) {
+            TransportMonth::create([
+                'student_id' => $studentId,
+                'fee_assign_children_id' => $feesId,
+                'user_id' => $this->transportMonthUserId(),
+                'month' => $month->id,
+                'amount' => $this->getFeesAmount($newFeesMaster) / 10,
+                'status' => '1',
+                'state' => '1',
+            ]);
+        }
+    }
+
+    /**
+     * Legacy: pivot used to prune class school fees when category did not match fees_type_student_category.
+     * School amounts are scoped by class-linked fee types; category pivot is only for transport.
+     */
+    private function pruneSchoolFeeIfCategoryDisallowed(int $studentId, int $classId, $sectionId, ?int $studentCategoryId): void
+    {
+        // Intentionally no-op — see syncAutoSchoolFeeFromClassForStudent vs syncAutoTransportFeeFromCategoryForStudent.
+    }
+
+    /**
+     * Remove unpaid school fee line for this student tied to a specific class/section (class-based fee type).
+     */
+    private function deleteUnpaidSchoolFeesForStudentForClass(int $studentId, int $classId, $sectionId): void
+    {
+        $feeTypeRaw = $this->getFeeTypeId($classId);
+        if ($feeTypeRaw === '' || (int) $feeTypeRaw <= 0) {
+            return;
+        }
+
+        $feesGroupId = $this->getFeeGroupId((int) $feeTypeRaw);
+        if ($feesGroupId === '' || $feesGroupId === null) {
+            return;
+        }
+
+        $feesAssignId = $this->checkFeesAssign($classId, $feesGroupId, $sectionId);
+        if ($feesAssignId === '' || $feesAssignId === null) {
+            return;
+        }
+
+        $q = FeesAssignChildren::query()
+            ->where('fees_assign_id', $feesAssignId)
+            ->where('student_id', $studentId);
+
+        if (Schema::hasColumn('fees_assign_childrens', 'paid_amount')) {
+            $q->where(function ($sub) {
+                $sub->whereNull('paid_amount')->orWhere('paid_amount', 0);
+            });
+        }
+
+        $ids = $q->pluck('id');
+        foreach ($ids as $childId) {
+            $this->archiveFeesAssignChildToDeleteStudent($studentId, (int) $childId, 'student_edit_remove_class_school');
+            TransportMonth::where('fee_assign_children_id', $childId)->delete();
+            DB::table('fees_assign_childrens')->where('id', $childId)->delete();
+        }
+    }
+
     private function checkFeesMasterChildren( $fee_type_id,  $fees_master_id)
     {
         $class_setup = DB::select('SELECT id from fees_master_childrens where fees_master_id  = ? and fees_type_id = ?'
@@ -3208,6 +4453,63 @@ private function getStudentIdByName($student_name, $class,$section)
         }else{
             return "";
         }
+    }
+
+    /**
+     * Find or create fees_assign for auto-assigned lines (student create/update).
+     * Bulk assignment often saves section_id = 1 while the student carries their real section — reuse matching rows instead of silently missing.
+     */
+    private function resolveOrCreateFeesAssignIdForStudentFee(int $classId, $feesGroupId, $sectionId): int
+    {
+        $sessionId = setting('session');
+        $preferred = ($sectionId !== null && $sectionId !== '') ? (int) $sectionId : null;
+
+        if ($preferred !== null) {
+            $id = DB::table('fees_assigns')
+                ->where('classes_id', $classId)
+                ->where('session_id', $sessionId)
+                ->where('fees_group_id', $feesGroupId)
+                ->where('section_id', $preferred)
+                ->value('id');
+            if ($id) {
+                return (int) $id;
+            }
+        }
+
+        $id = DB::table('fees_assigns')
+            ->where('classes_id', $classId)
+            ->where('session_id', $sessionId)
+            ->where('fees_group_id', $feesGroupId)
+            ->where('section_id', 1)
+            ->value('id');
+        if ($id) {
+            Log::info('StudentRepository: reusing fees_assign (section_id=1) for auto fee attach', [
+                'class_id' => $classId,
+                'fees_group_id' => $feesGroupId,
+                'preferred_section' => $preferred,
+            ]);
+
+            return (int) $id;
+        }
+
+        $id = DB::table('fees_assigns')
+            ->where('classes_id', $classId)
+            ->where('session_id', $sessionId)
+            ->where('fees_group_id', $feesGroupId)
+            ->orderBy('id')
+            ->value('id');
+        if ($id) {
+            return (int) $id;
+        }
+
+        $row = new FeesAssign();
+        $row->session_id = $sessionId;
+        $row->classes_id = $classId;
+        $row->section_id = $preferred ?? 1;
+        $row->fees_group_id = $feesGroupId;
+        $row->save();
+
+        return (int) $row->id;
     }
 
     private function checkFeesAssign( $classesStore_id,  $fees_group_id,$sectionStore_id)
@@ -3240,6 +4542,29 @@ private function getStudentIdByName($student_name, $class,$section)
         }else{
             return "";
         }
+    }
+
+    /** @internal Used by FeesAssignRepository SPA bulk assignment (delegates to private transport/category helpers). */
+    public function feesAssignResolveTransportFeesMasterId(?int $studentCategoryId): ?int
+    {
+        return $this->resolveTransportFeesMasterId($studentCategoryId);
+    }
+
+    /** Boarding-linked school fees master (non-transport), via fees_type_student_category. */
+    public function feesAssignResolveBoardingSchoolFeesMasterId(?int $studentCategoryId): ?int
+    {
+        return $this->resolveBoardingSchoolFeesMasterId($studentCategoryId);
+    }
+
+    public function feesAssignIsBoardingStudentCategory(?int $studentCategoryId): bool
+    {
+        return $this->isBoardingStudentCategory($studentCategoryId);
+    }
+
+    /** Reuse the same fees_assign routing as automated student→fee syncing. */
+    public function feesAssignEnsureFeesAssignContainer(int $classId, $feesGroupId, int $sectionId = 1): int
+    {
+        return $this->resolveOrCreateFeesAssignIdForStudentFee($classId, $feesGroupId, $sectionId);
     }
 
     private function getMemberId( $student_id)

@@ -20,6 +20,7 @@ use App\Models\StudentInfo\SessionClassStudent;
 use Illuminate\Support\Facades\Validator;
 use App\Models\FloatBalance;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Http\Request;
 use App\Models\FailedSms;
 use App\Services\Accounts\BankAccountBalanceService;
 
@@ -43,7 +44,15 @@ class FeesCollectRepository implements FeesCollectInterface
 
     public function getPaginateAll()
     {
-        return $this->model::latest()->paginate(10);
+        return $this->model::query()
+            ->with([
+                'student',
+                'feesAssignChild' => function ($q) {
+                    $q->with(['feesMaster', 'feesAssign.class', 'feesAssign.section']);
+                },
+            ])
+            ->orderByDesc('id')
+            ->paginate(10);
     }
 
     public function generateUniqueTrackingNumber() {
@@ -93,8 +102,8 @@ class FeesCollectRepository implements FeesCollectInterface
         ]);
 
         try {
-            // Get student information including class, section, mobile, and bank name
-            // First try to get from session 9 (2026), if not found, get from any session
+            // Prefer class/section for the active academic session from settings
+            $sessionId = setting('session');
             $student = DB::select("
                 SELECT 
                     students.mobile as student_mobile,
@@ -108,14 +117,14 @@ class FeesCollectRepository implements FeesCollectInterface
                 FROM students
                 LEFT JOIN parent_guardians ON students.parent_guardian_id = parent_guardians.id
                 LEFT JOIN session_class_students ON session_class_students.student_id = students.id 
-                    AND session_class_students.session_id = 9
+                    AND session_class_students.session_id = ?
                 LEFT JOIN classes ON classes.id = session_class_students.classes_id
                 LEFT JOIN sections ON sections.id = session_class_students.section_id
                 LEFT JOIN bank_accounts ON bank_accounts.id = ?
                 WHERE students.id = ?
-            ", [$accountId, $studentId]);
+            ", [$sessionId, $accountId, $studentId]);
             
-            // If class/section not found for session 9, try to get from any session
+            // If class/section not found for current session, try any session row
             if (empty($student) || (empty($student[0]->class_name) && empty($student[0]->section_name))) {
                 $studentFallback = DB::select("
                     SELECT 
@@ -647,19 +656,21 @@ class FeesCollectRepository implements FeesCollectInterface
     // Try to retrieve the Outstanding Fee ID (only from 2026)
     $outstandingId = DB::table('fees_assign_childrens')
         ->join('fees_masters', 'fees_assign_childrens.fees_master_id', '=', 'fees_masters.id')
+        ->join('fees_assigns', 'fees_assign_childrens.fees_assign_id', '=', 'fees_assigns.id')
         ->where('fees_masters.fees_group_id', 1)
         ->where('fees_assign_childrens.remained_amount', '!=', 0)
         ->where('fees_assign_childrens.student_id', $studentId)
-        ->whereYear('fees_assign_childrens.created_at', 2026)
+        ->where('fees_assigns.session_id', setting('session'))
         ->value('fees_assign_childrens.id');
 
-         // Try to retrieve the Outstanding Fee ID for Transport (only from 2026)
+         // Try to retrieve the Outstanding Fee ID for Transport
     $outstandingIdTransport = DB::table('fees_assign_childrens')
         ->join('fees_masters', 'fees_assign_childrens.fees_master_id', '=', 'fees_masters.id')
+        ->join('fees_assigns', 'fees_assign_childrens.fees_assign_id', '=', 'fees_assigns.id')
         ->where('fees_masters.fees_group_id', 9)
         ->where('fees_assign_childrens.remained_amount', '!=', 0)
         ->where('fees_assign_childrens.student_id', $studentId)
-        ->whereYear('fees_assign_childrens.created_at', 2026)
+        ->where('fees_assigns.session_id', setting('session'))
         ->value('fees_assign_childrens.id');
 
         if($status==1){
@@ -842,19 +853,21 @@ private function processOtherFees($studentId, $amount, $status, $id, $fees_colle
         if ($status == 1) {
             $feeIds = DB::table('fees_assign_childrens')
                 ->join('fees_masters', 'fees_masters.id', '=', 'fees_assign_childrens.fees_master_id')
+                ->join('fees_assigns', 'fees_assigns.id', '=', 'fees_assign_childrens.fees_assign_id')
                 ->whereNotIn('fees_masters.fees_group_id', [5])
                 ->where('fees_assign_childrens.student_id', $studentId)
                 ->where('fees_assign_childrens.remained_amount', '!=', 0)
-                ->whereYear('fees_assign_childrens.created_at', 2026)
+                ->where('fees_assigns.session_id', setting('session'))
                 ->orderBy('fees_assign_childrens.fees_master_id')
                 ->pluck('fees_assign_childrens.id');
         } else {
             $feeIds = DB::table('fees_assign_childrens')
-                ->where('student_id', $studentId)
-                ->where('id', $id)
-                ->whereYear('created_at', 2026)
-                ->orderBy('fees_master_id')
-                ->pluck('id');
+                ->join('fees_assigns', 'fees_assigns.id', '=', 'fees_assign_childrens.fees_assign_id')
+                ->where('fees_assign_childrens.student_id', $studentId)
+                ->where('fees_assign_childrens.id', $id)
+                ->where('fees_assigns.session_id', setting('session'))
+                ->orderBy('fees_assign_childrens.fees_master_id')
+                ->pluck('fees_assign_childrens.id');
         }
 		$lastFeeId = $feeIds->last();
         foreach (['quater_one', 'quater_two', 'quater_three', 'quater_four'] as $quarter) {
@@ -997,27 +1010,72 @@ private function processTransportFees($studentFeeId, $amount)
 
     public function showFeesAssignPerChildren($id)
     {
-        return FeesAssignChildren::find($id);
+        $q = FeesAssignChildren::query()
+            ->select('fees_assign_childrens.*')
+            ->join('fees_assigns', 'fees_assign_childrens.fees_assign_id', '=', 'fees_assigns.id')
+            ->join('fees_masters', 'fees_assign_childrens.fees_master_id', '=', 'fees_masters.id');
+
+        // Require a concrete student row (same INNER JOIN semantics as reporting queries).
+        if (Schema::hasColumn('fees_assign_childrens', 'student_id')) {
+            $q->join('students', 'students.id', '=', 'fees_assign_childrens.student_id');
+        }
+
+        $row = $q
+            ->with([
+                'student.gender',
+                'student.studentCategory',
+                'student.parent',
+                'feesMaster.type.schoolClass',
+                'feesMaster.group',
+                'feesMaster.session',
+                'feesAssign.session',
+                'feesAssign.class',
+                'feesAssign.section',
+                'feesAssign.category',
+                'feesAssign.gender',
+                'feesAssign.group',
+                'feesCollects.bankAccount',
+                'feesCollects.session',
+                'feesCollects.collectedBy',
+            ])
+            ->where('fees_assign_childrens.id', $id)
+            ->first();
+
+        if ($row && $row->student_id && $row->feesAssign && $row->feesAssign->session_id) {
+            $enrollment = SessionClassStudent::query()
+                ->where('student_id', $row->student_id)
+                ->where('session_id', $row->feesAssign->session_id)
+                ->with(['class', 'section', 'shift'])
+                ->first();
+            $row->setRelation('session_enrollment_for_assign', $enrollment ?: null);
+        }
+
+        return $row;
     }
 
     public function feesAssigned($id) // student id
     {
-        $groups = FeesAssignChildren::withCount('feesCollect')->with('feesCollect')->where('student_id', $id);
+        $sessionId = setting('session');
 
-        // Filter to only show fees created in 2026
-        $groups = $groups->whereYear('created_at', 2026);
-
-        // Only show fees for session_id = 9
-        $groups = $groups->whereHas('feesAssign', function($q) {
-            $q->where('session_id', '9');
-        });
+        $groups = FeesAssignChildren::withCount('feesCollect')
+            ->with(['feesCollect', 'feesMaster' => function ($q) {
+                $q->with(['type', 'group']);
+            }])
+            ->where('student_id', $id)
+            ->where(function ($q) {
+                $q->where('fees_assign_childrens.collect_status', 1)
+                    ->orWhereNull('fees_assign_childrens.collect_status');
+            })
+            ->whereHas('feesAssign', function ($q) use ($sessionId) {
+                $q->where('session_id', $sessionId);
+            });
 
         return $groups->get();
     }
 
     public function feesAssignedDetailsSearch($request)
     {
-        $currentSession = setting('session');
+        $sessionId = setting('session');
         $groups = FeesAssignChildren::withCount('feesCollect')
             ->with('feesCollect')
             ->join('students', 'fees_assign_childrens.student_id', '=', 'students.id')
@@ -1025,8 +1083,7 @@ private function processTransportFees($studentFeeId, $amount)
             ->join('fees_collects', 'fees_assign_childrens.id', '=', 'fees_collects.fees_assign_children_id')
             ->leftJoin('bank_accounts', 'bank_accounts.id', '=', 'fees_collects.account_id')
             ->where('students.status', '!=', 0)
-            ->where('fees_assigns.session_id', '9')
-            ->whereYear('fees_assign_childrens.created_at', 2026)
+            ->where('fees_assigns.session_id', $sessionId)
             ->select(
                 'fees_assign_childrens.*',
                 'students.first_name',
@@ -1050,11 +1107,11 @@ private function processTransportFees($studentFeeId, $amount)
 
         return $groups->get();
     }
-    public function feesAssignedDetails()
+    public function feesAssignedDetails(?Request $request = null)
     {
-        $currentSession = setting('session');
-        
-        // Optimized query: Remove unnecessary eager loading, add pagination, add session filter
+        $sessionId = setting('session');
+
+        // Optimized query: pagination + session filter; optional filters aligned with legacy cash transactions UI
         $groups = DB::table('fees_collects')
             ->join('fees_assign_childrens', 'fees_collects.fees_assign_children_id', '=', 'fees_assign_childrens.id')
             ->join('fees_assigns', 'fees_assign_childrens.fees_assign_id', '=', 'fees_assigns.id')
@@ -1063,111 +1120,171 @@ private function processTransportFees($studentFeeId, $amount)
             ->leftJoin('fees_masters', 'fees_assign_childrens.fees_master_id', '=', 'fees_masters.id')
             ->leftJoin('fees_types', 'fees_masters.fees_type_id', '=', 'fees_types.id')
             ->where('students.status', '!=', 0)
-            ->where('fees_assigns.session_id', '9')
-            ->whereYear('fees_assign_childrens.created_at', 2026)
-            ->where(function($query) {
-                // Exclude completed transactions
+            ->where('fees_assigns.session_id', $sessionId)
+            ->where(function ($query) {
                 $query->whereNull('fees_assign_childrens.comment')
-                      ->orWhere('fees_assign_childrens.comment', '!=', 'completed');
-            })
-            ->select(
-                'fees_assign_childrens.id as fees_assign_children_id',
-                'fees_assign_childrens.student_id',
-                'fees_assign_childrens.fees_master_id',
-                'fees_assign_childrens.fees_amount',
-                'fees_assign_childrens.paid_amount',
-                'fees_assign_childrens.remained_amount',
-                'fees_assign_childrens.outstandingbalance',
-                'fees_assign_childrens.comment',
-                'students.first_name',
-                'students.last_name',
-                'fees_collects.id as fees_collect_id',
-                'fees_collects.amount as transaction_amount',
-                'fees_collects.created_at as transaction_date',
-                'fees_collects.printed',
-                'fees_collects.comments',
-                'bank_accounts.bank_name',
-                'bank_accounts.account_number',
-                'fees_types.name as fees_type_name'
-            )
+                    ->orWhere('fees_assign_childrens.comment', '!=', 'completed');
+            });
+
+        if ($request !== null && $request->filled('name')) {
+            $t = trim((string) $request->name);
+            $like = '%'.addcslashes($t, '%_\\').'%';
+            $groups->where(function ($q) use ($like) {
+                $q->where('students.first_name', 'like', $like)
+                    ->orWhere('students.last_name', 'like', $like)
+                    ->orWhereRaw(
+                        "CONCAT(COALESCE(students.first_name, ''), ' ', COALESCE(students.last_name, '')) LIKE ?",
+                        [$like]
+                    );
+            });
+        }
+
+        if ($request !== null && $request->filled('class')) {
+            $groups->where('fees_assigns.classes_id', (int) $request->class);
+        }
+
+        if ($request !== null && $request->filled('start_date')) {
+            $groups->whereDate('fees_collects.created_at', '>=', $request->start_date);
+        }
+
+        if ($request !== null && $request->filled('end_date')) {
+            $groups->whereDate('fees_collects.created_at', '<=', $request->end_date);
+        }
+
+        $groups->select(
+            'fees_assign_childrens.id as fees_assign_children_id',
+            'fees_assign_childrens.student_id',
+            'fees_assign_childrens.fees_master_id',
+            'fees_assign_childrens.fees_amount',
+            'fees_assign_childrens.paid_amount',
+            'fees_assign_childrens.remained_amount',
+            'fees_assign_childrens.outstandingbalance',
+            'fees_assign_childrens.comment',
+            'students.first_name',
+            'students.last_name',
+            'fees_collects.id as fees_collect_id',
+            'fees_collects.amount as transaction_amount',
+            'fees_collects.created_at as transaction_date',
+            'fees_collects.printed',
+            'fees_collects.comments',
+            'bank_accounts.bank_name',
+            'bank_accounts.account_number',
+            'fees_types.name as fees_type_name'
+        )
             ->orderBy('fees_collects.created_at', 'DESC');
 
-        // Return paginated results (50 per page for better performance)
-        return $groups->paginate(50);
+        $pagination = $groups->paginate(50)->appends($request?->except('page') ?? []);
+
+        return $pagination;
     }
 
-      public function feesAssignedDetailsForPushTransactions()
+    public function feesAssignedDetailsForPushTransactions(?\Illuminate\Http\Request $request = null)
     {
+        $sessionId = setting('session');
         // Avoid eager-loading feesCollect here: nested toArray() JSON responses can recurse and blow the stack.
         $groups = FeesAssignChildren::query()
             ->join('students', 'fees_assign_childrens.student_id', '=', 'students.id')
             ->join('fees_assigns', 'fees_assign_childrens.fees_assign_id', '=', 'fees_assigns.id')
             ->join('push_transactions', 'fees_assign_childrens.id', '=', 'push_transactions.fees_assign_children_id')
             ->leftJoin('bank_accounts', 'bank_accounts.id', '=', 'push_transactions.account_id')
-            ->where('fees_assigns.session_id', '9')
-            ->whereYear('fees_assign_childrens.created_at', 2026)
+            ->where('fees_assigns.session_id', $sessionId)
             ->where('students.status', '!=', 0)
             ->where(function ($q) {
                 $q->whereNull('push_transactions.payment_status')
                     ->orWhere('push_transactions.payment_status', '!=', 'cancelled');
-            })
-            ->select(
-                'fees_assign_childrens.id',
-                'fees_assign_childrens.student_id',
-                'fees_assign_childrens.fees_assign_id',
-                'fees_assign_childrens.fees_master_id',
-                'students.first_name',
-                'students.last_name',
-                'push_transactions.amount as transaction_amount',
-                'push_transactions.payment_date as transaction_date',
-                'bank_accounts.bank_name',
-                'bank_accounts.account_number',
-                'push_transactions.id as fees_collect_id',
-                'push_transactions.payment_receipt',
-                'push_transactions.settlement_receipt'
+            });
 
-            )->orderBy('push_transactions.created_at', 'DESC');
+        if ($request !== null && $request->filled('name')) {
+            $t = trim((string) $request->name);
+            $like = '%'.addcslashes($t, '%_\\').'%';
+            $groups->where(function ($q) use ($like) {
+                $q->where('students.first_name', 'like', $like)
+                    ->orWhere('students.last_name', 'like', $like)
+                    ->orWhereRaw(
+                        "CONCAT(COALESCE(students.first_name, ''), ' ', COALESCE(students.last_name, '')) LIKE ?",
+                        [$like]
+                    );
+            });
+        }
+
+        $groups->select(
+            'fees_assign_childrens.id as fees_assign_children_id',
+            'fees_assign_childrens.student_id',
+            'fees_assign_childrens.fees_assign_id',
+            'fees_assign_childrens.fees_master_id',
+            'students.first_name',
+            'students.last_name',
+            'push_transactions.amount as transaction_amount',
+            'push_transactions.payment_date as transaction_date',
+            'bank_accounts.bank_name',
+            'bank_accounts.account_number',
+            'push_transactions.id as fees_collect_id',
+            'push_transactions.payment_receipt',
+            'push_transactions.settlement_receipt'
+
+        )->orderBy('push_transactions.created_at', 'DESC');
 
         return $groups->get();
     }
 
-    public function feesAssignedUnpaidDetails()
+    public function feesAssignedUnpaidDetails(?\Illuminate\Http\Request $request = null)
     {
+        $sessionId = setting('session');
         $groups = Amendment::join('fees_assign_childrens', 'fees_assign_childrens.id', '=', 'amendments.fees_assign_id')
             ->join('students', 'fees_assign_childrens.student_id', '=', 'students.id')
             ->join('fees_assigns', 'fees_assign_childrens.fees_assign_id', '=', 'fees_assigns.id')
-//            ->join('fees_collects', 'fees_assign_childrens.id', '=', 'fees_collects.fees_assign_children_id')
-//            ->leftJoin('bank_accounts', 'bank_accounts.id', '=', 'fees_collects.account_id')
-            ->where('fees_assigns.session_id', '9')
-            ->whereYear('fees_assign_childrens.created_at', 2026)
+            ->where('fees_assigns.session_id', $sessionId)
             ->where('fees_assign_childrens.remained_amount', '>', 0)
-            ->where('students.status', '!=', 0)
-            ->select(
-                'fees_assign_childrens.*',
-                'students.first_name',
-                'students.last_name',
-                'fees_assign_childrens.remained_amount as transaction_amount',
-                'fees_assign_childrens.created_at as transaction_date',
-//                'bank_accounts.*',
-                'fees_assign_childrens.id as fees_collect_id',
-                'students.id as student_id',
-                'amendments.description',
-                'amendments.date',
-                'amendments.parent_name'
-            );
+            ->where('students.status', '!=', 0);
+
+        if ($request !== null && $request->filled('name')) {
+            $t = trim((string) $request->name);
+            $like = '%'.addcslashes($t, '%_\\').'%';
+            $groups->where(function ($q) use ($like) {
+                $q->where('students.first_name', 'like', $like)
+                    ->orWhere('students.last_name', 'like', $like)
+                    ->orWhereRaw(
+                        "CONCAT(COALESCE(students.first_name, ''), ' ', COALESCE(students.last_name, '')) LIKE ?",
+                        [$like]
+                    );
+            });
+        }
+
+        if ($request !== null && $request->filled('q')) {
+            $t = trim((string) $request->q);
+            $like = '%'.addcslashes($t, '%_\\').'%';
+            $groups->where(function ($q) use ($like) {
+                $q->where('amendments.description', 'like', $like)
+                    ->orWhere('amendments.parent_name', 'like', $like);
+            });
+        }
+
+        $groups->select(
+            'fees_assign_childrens.*',
+            'students.first_name',
+            'students.last_name',
+            'fees_assign_childrens.remained_amount as transaction_amount',
+            'fees_assign_childrens.created_at as transaction_date',
+            'fees_assign_childrens.id as fees_collect_id',
+            'students.id as student_id',
+            'amendments.description',
+            'amendments.date',
+            'amendments.parent_name'
+        )
+            ->orderByDesc('amendments.date');
 
         return $groups->get();
     }
 
     public function  feesAssignedUnpaidDetailsSearch($request){
+        $sessionId = setting('session');
         $groups = FeesAssignChildren::withCount('feesCollect')
             ->with('feesCollect')
             ->join('students', 'fees_assign_childrens.student_id', '=', 'students.id')
             ->join('fees_assigns', 'fees_assign_childrens.fees_assign_id', '=', 'fees_assigns.id')
 //            ->join('fees_collects', 'fees_assign_childrens.id', '=', 'fees_collects.fees_assign_children_id')
 //            ->leftJoin('bank_accounts', 'bank_accounts.id', '=', 'fees_collects.account_id')
-            ->where('fees_assigns.session_id', '9')
-            ->whereYear('fees_assign_childrens.created_at', 2026)
+            ->where('fees_assigns.session_id', $sessionId)
             ->where('fees_assign_childrens.remained_amount', '>', 0)
             ->where('students.status', '!=', 0)
             ->select(
@@ -1293,12 +1410,9 @@ private function processTransportFees($studentFeeId, $amount)
             $studentId = DB::table('fees_collects')->where('id', $id)->value('student_id');
             $amount = DB::table('fees_collects')->where('id', $id)->value('amount');
 
-            $row = $this->model->find($id);
-            $row->delete();
-
-            DB::delete('DELETE FROM incomes WHERE fees_collect_id = ?', [$id]);
-
-           $fees_tracking = DB::select("SELECT * FROM fees_tracking WHERE fees_collect_id = ?", [$id]);
+            $fees_tracking = Schema::hasTable('fees_tracking')
+                ? DB::select('SELECT * FROM fees_tracking WHERE fees_collect_id = ?', [$id])
+                : [];
 
             foreach ($fees_tracking as $fee_tracking) {
                 DB::update(
@@ -1313,6 +1427,14 @@ private function processTransportFees($studentFeeId, $amount)
                     ]
                 );
             }
+
+            DB::delete('DELETE FROM incomes WHERE fees_collect_id = ?', [$id]);
+            if (Schema::hasTable('fees_tracking')) {
+                DB::delete('DELETE FROM fees_tracking WHERE fees_collect_id = ?', [$id]);
+            }
+
+            $row = $this->model->find($id);
+            $row->delete();
 
             // Call stored procedure
             //DB::statement("CALL UpdateFeesAmount()");
@@ -1370,6 +1492,9 @@ private function processTransportFees($studentFeeId, $amount)
                 }
 
                 DB::table('incomes')->where('fees_collect_id', $feesCollectId)->delete();
+                if (Schema::hasTable('fees_tracking')) {
+                    DB::table('fees_tracking')->where('fees_collect_id', $feesCollectId)->delete();
+                }
                 DB::table('fees_collects')->where('id', $feesCollectId)->delete();
             }
 
@@ -1429,9 +1554,12 @@ private function processTransportFees($studentFeeId, $amount)
             $students = $students->where('session_class_students.student_id', $request->student);
         }
 
+        $sessionId = setting('session');
+
         $students = $students
             ->join('students', 'session_class_students.student_id', '=', 'students.id')
             ->join('fees_assign_childrens', 'students.id', '=', 'fees_assign_childrens.student_id')
+            ->join('fees_assigns', 'fees_assigns.id', '=', 'fees_assign_childrens.fees_assign_id')
             ->join('fees_masters', 'fees_masters.id', '=', 'fees_assign_childrens.fees_master_id')
             ->join('fees_types', 'fees_types.id', '=', 'fees_masters.fees_type_id')
             ->leftJoin('classes', 'session_class_students.classes_id', '=', 'classes.id')
@@ -1440,8 +1568,7 @@ private function processTransportFees($studentFeeId, $amount)
                 $q->where('fees_assign_childrens.collect_status', 1)
                   ->orWhereNull('fees_assign_childrens.collect_status');
             })
-            ->where('fees_masters.session_id', '9')
-            ->whereYear('fees_assign_childrens.created_at', 2026)
+            ->where('fees_assigns.session_id', $sessionId)
             ->select(
                 'fees_types.name as fees_name',
                 'session_class_students.*',
@@ -1477,19 +1604,21 @@ private function processTransportFees($studentFeeId, $amount)
 
     public function getFeesAssignStudentsAll()
         {
+            $sessionId = setting('session');
+
             return SessionClassStudent::join('students', 'session_class_students.student_id', '=', 'students.id')
                 ->join('fees_assign_childrens', 'students.id', '=', 'fees_assign_childrens.student_id')
+                ->join('fees_assigns', 'fees_assigns.id', '=', 'fees_assign_childrens.fees_assign_id')
                 ->join('fees_masters', 'fees_masters.id', '=', 'fees_assign_childrens.fees_master_id')
                 ->join('fees_types', 'fees_types.id', '=', 'fees_masters.fees_type_id')
                 ->leftJoin('classes', 'session_class_students.classes_id', '=', 'classes.id')
-                ->where('session_class_students.session_id', setting('session'))
+                ->where('session_class_students.session_id', $sessionId)
                 ->where('students.status', '!=', 0)
                 ->where(function ($q) {
                     $q->where('fees_assign_childrens.collect_status', 1)
                       ->orWhereNull('fees_assign_childrens.collect_status');
                 })
-                ->where('fees_masters.session_id', '9')
-                ->whereYear('fees_assign_childrens.created_at', 2026)
+                ->where('fees_assigns.session_id', $sessionId)
                 ->select(
                     'students.*',
                     'fees_assign_childrens.*',
@@ -1521,16 +1650,18 @@ private function processTransportFees($studentFeeId, $amount)
      */
     public function getCancelledCollects($perPage = 20)
     {
+        $sessionId = setting('session');
+
         return SessionClassStudent::join('students', 'session_class_students.student_id', '=', 'students.id')
             ->join('fees_assign_childrens', 'students.id', '=', 'fees_assign_childrens.student_id')
+            ->join('fees_assigns', 'fees_assigns.id', '=', 'fees_assign_childrens.fees_assign_id')
             ->join('fees_masters', 'fees_masters.id', '=', 'fees_assign_childrens.fees_master_id')
             ->join('fees_types', 'fees_types.id', '=', 'fees_masters.fees_type_id')
             ->leftJoin('classes', 'session_class_students.classes_id', '=', 'classes.id')
-            ->where('session_class_students.session_id', setting('session'))
+            ->where('session_class_students.session_id', $sessionId)
             ->where('students.status', '!=', 0)
             ->where('fees_assign_childrens.collect_status', 0)
-            ->where('fees_masters.session_id', '9')
-            ->whereYear('fees_assign_childrens.created_at', 2026)
+            ->where('fees_assigns.session_id', $sessionId)
             ->select(
                 'students.first_name',
                 'students.last_name',

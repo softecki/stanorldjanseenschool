@@ -42,6 +42,14 @@ Route::middleware(saasMiddleware())->group(function () {
                 Route::get('/page/{slug}',          'page')->name('frontend.page');
 
             });
+
+            // Public SPA deep-link/refresh fallback.
+            Route::get('{spaPublicPath}', function () {
+                return view('spa.app');
+            })->where(
+                'spaPublicPath',
+                '^(about|news|news-detail/[^/]+|events|event-detail/[^/]+|notices|notice-detail/[^/]+|contact|result|online-admission|online-admission-fees/[^/]+/[^/]+|landing|policy|page/[^/]+)$'
+            );
         });
 
     });

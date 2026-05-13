@@ -42,7 +42,7 @@ export function PromoteStudentsCreatePage() {
 
     const loadIndex = () => {
         setLoading(true);
-        axios.get('/promote-students', { headers: xhrJson })
+        axios.get('/promote/students', { headers: xhrJson })
             .then((r) => {
                 setMeta(r.data?.meta || {});
                 setStudents([]);
@@ -81,7 +81,7 @@ export function PromoteStudentsCreatePage() {
         setLoading(true);
         setErr('');
         try {
-            const r = await axios.post('/promote-students/search', filters, { headers: xhrJson });
+            const r = await axios.post('/promote/students/search', filters, { headers: xhrJson });
             const data = r.data?.data || {};
             setStudents(data.students || []);
             setResults(data.results || {});
@@ -121,7 +121,7 @@ export function PromoteStudentsCreatePage() {
                 fd.append(`roll[${idx}][]`, String(rolls[id] || ''));
             });
 
-            await axios.post('/promote-students/store', fd, { headers: xhrJson });
+            await axios.post('/promote/students/store', fd, { headers: xhrJson });
             await doSearch({ preventDefault() {} });
         } catch (ex) {
             setErr(ex.response?.data?.message || 'Failed to promote students.');

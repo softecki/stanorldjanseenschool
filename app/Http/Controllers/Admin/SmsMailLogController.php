@@ -8,6 +8,7 @@ use App\Http\Requests\SmsMailLog\SmsMailLogStoreRequest;
 use App\Models\SmsMailTemplate;
 use App\Models\User;
 use App\Repositories\Academic\ClassSetupRepository;
+use App\Repositories\RoleRepository;
 use App\Repositories\SmsMailLog\SmsMailLogRepository;
 use App\Repositories\SmsMailTemplate\SmsMailTemplateRepository;
 use Illuminate\Http\JsonResponse;
@@ -24,14 +25,18 @@ class SmsMailLogController extends Controller
 
     private $classSetupRepo;
 
+    private $roleRepo;
+
     public function __construct(
         SmsMailLogRepository $repo,
         SmsMailTemplateRepository $templateRepo,
         ClassSetupRepository $classSetupRepo,
+        RoleRepository $roleRepo,
     ) {
         $this->templateRepo = $templateRepo;
         $this->repo = $repo;
         $this->classSetupRepo = $classSetupRepo;
+        $this->roleRepo = $roleRepo;
     }
 
     public function index(Request $request): JsonResponse|RedirectResponse
@@ -65,7 +70,7 @@ class SmsMailLogController extends Controller
     {
         $result = $this->repo->store($request);
 
-        return response()->json($result);
+        return response()->json($result, $result['status'] ? 200 : 422);
     }
 
     public function edit(Request $request, $id): JsonResponse|RedirectResponse

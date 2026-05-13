@@ -28,7 +28,10 @@ class BloodGroupController extends Controller
         $data['bloodGroup'] = $this->bloodGroup->getAll();
         $data['title'] = ___('settings.blood_groups');
         if ($request->expectsJson()) {
-            return response()->json(['data' => $data, 'meta' => ['title' => $data['title']]]);
+            return response()->json([
+                'data' => $data['bloodGroup'],
+                'meta' => ['title' => $data['title']],
+            ]);
         }
 
         return redirect()->to(spa_url('blood-groups'));

@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use App\Models\Academic\ClassSetup;
 use App\Interfaces\Academic\ClassesInterface;
 use App\Models\ClassTranslate;
+use Illuminate\Support\Facades\Schema;
 
 class ClassesRepository implements ClassesInterface
 {
@@ -25,22 +26,46 @@ class ClassesRepository implements ClassesInterface
 
     public function assignedAll()
     {
-        // Use session_id = 9 for 2026 instead of setting('session') which returns 8
-        return ClassSetup::join('classes', 'class_setups.classes_id', '=', 'classes.id')
-        ->where('class_setups.session_id', 9)
-        ->orderBy('classes.orders', 'asc')
-        ->select('class_setups.*') 
-        ->get();
+        $sessionId = setting('session');
+        if ($sessionId === null || $sessionId === '') {
+            return collect();
+        }
+
+        $q = ClassSetup::query()
+            ->with('class')
+            ->join('classes', 'class_setups.classes_id', '=', 'classes.id')
+            ->where('class_setups.session_id', $sessionId);
+        if (Schema::hasColumn('classes', 'orders')) {
+            $q->orderBy('classes.orders', 'asc');
+        } else {
+            $q->orderBy('classes.id', 'asc');
+        }
+
+        return $q->select('class_setups.*')->get();
     }
 
     public function all()
     {
-        return $this->classes->active()->orderBy('orders', 'asc')->get();
+        $q = $this->classes->active();
+        if (Schema::hasColumn($this->classes->getTable(), 'orders')) {
+            $q->orderBy('orders', 'asc');
+        } else {
+            $q->orderBy('id', 'asc');
+        }
+
+        return $q->get();
     }
 
     public function getAll()
     {
-        return $this->classes->orderBy('orders', 'asc')->paginate(Settings::PAGINATE);
+        $q = $this->classes->newQuery();
+        if (Schema::hasColumn($this->classes->getTable(), 'orders')) {
+            $q->orderBy('orders', 'asc');
+        } else {
+            $q->orderBy('id', 'asc');
+        }
+
+        return $q->paginate(Settings::PAGINATE);
     }
 
     public function store($request)

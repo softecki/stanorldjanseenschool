@@ -34,23 +34,30 @@ class ExpenseRepository implements ExpenseInterface
    public function getAll()
     {
         return $this->expense
+            ->with(['head', 'bankAccount'])
             ->join('expenses_status', 'expenses_status.id', '=', 'expenses.status')
-            ->where('session_id', setting('session'))
+            ->where('expenses.session_id', setting('session'))
             ->select('expenses.*', 'expenses_status.status_name') // Corrected here
-            ->latest() // Applies ORDER BY created_at DESC (by default)
+            ->orderByDesc('expenses.created_at')
             ->paginate(Settings::PAGINATE);
     }
 
         public function getAllProduct()
     {
-
-        return Product::join('items', 'items.id', '=', 'products.name')
-        ->paginate(Settings::PAGINATE);
+        return Product::leftJoin('items', 'items.id', '=', 'products.name')
+            ->select(
+                'products.*',
+                'products.name as item_id',
+                'items.name as item_name',
+                'items.description as item_description'
+            )
+            ->orderBy('items.name')
+            ->paginate(Settings::PAGINATE);
       }
 
         public function getAllItem()
         {
-        return Item::paginate(Settings::PAGINATE);  
+        return Item::orderBy('name')->paginate(Settings::PAGINATE);
         }
 
          public function getAllBalance()
@@ -66,8 +73,7 @@ class ExpenseRepository implements ExpenseInterface
             $expenseStore->session_id       = setting('session'); 
             $expenseStore->name             = $request->name;
             $expenseStore->expense_head     = $request->expense_head;
-            $expenseStore->date = Carbon::now()->format('Y-m-d');
-            //  $expenseStore->date = $request->date;
+            $expenseStore->date             = $request->date ?: Carbon::now()->format('Y-m-d');
             $expenseStore->amount           = $request->amount;
             // $expenseStore->bank_name             = $request->bank_name;
             $expenseStore->account_number           = $request->account_number ?? null;
@@ -109,10 +115,14 @@ class ExpenseRepository implements ExpenseInterface
         DB::beginTransaction();
         try {
             $expenseUpdate                   = $this->expense->findOrfail($id);
+            $previousBankAccountId = Schema::hasColumn('expenses', 'bank_account_id') && $expenseUpdate->bank_account_id
+                ? (int) $expenseUpdate->bank_account_id
+                : (is_numeric($expenseUpdate->account_number) ? (int) $expenseUpdate->account_number : null);
+            $previousAmount = (float) $expenseUpdate->amount;
             $expenseUpdate->session_id       = setting('session'); 
             $expenseUpdate->name             = $request->name;
             $expenseUpdate->expense_head     = $request->expense_head;
-            // $expenseUpdate->date             = $request->date;
+            $expenseUpdate->date             = $request->date ?: ($expenseUpdate->date ?: Carbon::now()->format('Y-m-d'));
             $expenseUpdate->amount           = $request->amount;
             // $expenseUpdate->bank_name             = $request->bank_name??null;
             $expenseUpdate->status             = $request->status??null;
@@ -124,6 +134,17 @@ class ExpenseRepository implements ExpenseInterface
             $expenseUpdate->upload_id        = $this->UploadImageUpdate($request->document, 'backend/uploads/expenses', $expenseUpdate->upload_id);
             $expenseUpdate->description      = $request->description;
             $expenseUpdate->save();
+
+            if ($previousBankAccountId && $previousAmount > 0) {
+                BankAccountBalanceService::reverseDebit($previousBankAccountId, $previousAmount);
+            }
+
+            $bankAccountId = Schema::hasColumn('expenses', 'bank_account_id') && $expenseUpdate->bank_account_id
+                ? (int) $expenseUpdate->bank_account_id
+                : (is_numeric($expenseUpdate->account_number) ? (int) $expenseUpdate->account_number : null);
+            if ($bankAccountId && $expenseUpdate->amount > 0) {
+                BankAccountBalanceService::debit($bankAccountId, (float) $expenseUpdate->amount);
+            }
 
             DB::commit();
             return $this->responseWithSuccess(___('alert.updated_successfully'), []);
@@ -138,8 +159,20 @@ class ExpenseRepository implements ExpenseInterface
         DB::beginTransaction();
         try {
             $expenseDestroy = $this->expense->find($id);
+            if (!$expenseDestroy) {
+                DB::rollBack();
+                return $this->responseWithError(___('alert.something_went_wrong_please_try_again'), []);
+            }
+            $bankAccountId = Schema::hasColumn('expenses', 'bank_account_id') && $expenseDestroy->bank_account_id
+                ? (int) $expenseDestroy->bank_account_id
+                : (is_numeric($expenseDestroy->account_number) ? (int) $expenseDestroy->account_number : null);
+            $amount = (float) $expenseDestroy->amount;
             $this->UploadImageDelete($expenseDestroy->upload_id);
             $expenseDestroy->delete();
+
+            if ($bankAccountId && $amount > 0) {
+                BankAccountBalanceService::reverseDebit($bankAccountId, $amount);
+            }
 
             DB::commit();
             return $this->responseWithSuccess(___('alert.deleted_successfully'), []);

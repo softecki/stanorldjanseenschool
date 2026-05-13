@@ -19,9 +19,12 @@ class MarksheetRepository implements MarksheetInterface
                                         ->where('classes_id', $request->class)
                                         ->where('section_id', $request->section)
                                         // ->where('session_id', setting('session'))
-                                        ->with('marksRegisterChilds', function ($query) use($request) {
-                                            $query->where('student_id', $request->student);
-                                           })->get();
+                                        ->with([
+                                            'subject',
+                                            'marksRegisterChilds' => function ($query) use($request) {
+                                                $query->where('student_id', $request->student);
+                                            },
+                                        ])->get();
 
 
         $result      = ___('examination.Passed');
@@ -36,7 +39,7 @@ class MarksheetRepository implements MarksheetInterface
        $grades = MarksGrade::where('session_id', setting('session'))->get();
        $gpa = '';
        foreach($grades as $grade) {
-            if($grade->percent_from <= $total_marks/count($marks_registers) && $grade->percent_upto >= $total_marks/count($marks_registers)) {
+            if(count($marks_registers) > 0 && $grade->percent_from <= $total_marks/count($marks_registers) && $grade->percent_upto >= $total_marks/count($marks_registers)) {
                 $gpa = $grade->point;
             }
        }

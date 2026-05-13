@@ -49,7 +49,6 @@ class PromoteStudentController extends Controller
         $data['promoteClasses']     = [];
         $data['promoteSections']     = [];
         $students                   = [];
-        $request                    = [];
         $results                    = [''];
         if ($request->expectsJson()) {
             return response()->json([
@@ -86,7 +85,7 @@ class PromoteStudentController extends Controller
         return redirect()->to(url('/app/students/promote'));
     }
 
-    public function store(Request $request): JsonResponse|RedirectResponse
+    public function store(PromoteStudentStoreRequest $request): JsonResponse|RedirectResponse
     {
         $result = $this->repo->store($request);
         if($result['status']){

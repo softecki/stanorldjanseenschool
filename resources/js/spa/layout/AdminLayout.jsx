@@ -336,9 +336,7 @@ const menuGroups = [
             { label: 'Students', to: '/students', icon: 'user-group' },
             { label: 'Student Category', to: '/categories', icon: 'tag' },
             { label: 'Promote Students', to: '/promote', icon: 'arrow-up' },
-            { label: 'Disabled Students', to: '/disabled', icon: 'user-minus' },
-            { label: 'Guardian', to: '/parents', icon: 'shield' },
-            { label: 'QR Code', to: '/students', icon: 'sparkles' },
+            { label: 'QR Code', to: '/qr_code', icon: 'sparkles' },
             { label: 'Deleted student history', to: '/deleted-history', icon: 'trash' },
         ],
     },
@@ -348,15 +346,8 @@ const menuGroups = [
         icon: 'building-office',
         links: [
             { label: 'Class', to: '/classes', icon: 'building' },
-            { label: 'Section', to: '/sections', icon: 'layers' },
-            { label: 'Class Setup', to: '/class-setups', icon: 'clipboard-check' },
             { label: 'Subject', to: '/subjects', icon: 'atom' },
-            { label: 'Subject Assign', to: '/subject-assigns', icon: 'book' },
-            { label: 'Time Schedule', to: '/time-schedules', icon: 'clock' },
-            { label: 'Shift', to: '/shifts', icon: 'arrow-path' },
             { label: 'Class Room', to: '/class-rooms', icon: 'building-office' },
-            { label: 'Class Routine', to: '/class-routines', icon: 'calendar' },
-            { label: 'Exam Routine', to: '/exam-routines', icon: 'document' },
         ],
     },
     {
@@ -364,14 +355,14 @@ const menuGroups = [
         label: 'Fees',
         icon: 'receipt',
         links: [
-            { label: 'Group', to: '/fees/groups', icon: 'layers' },
-            { label: 'Type', to: '/fees/types', icon: 'tag' },
-            { label: 'Master', to: '/fees/masters', icon: 'book' },
-            { label: 'Assign', to: '/fees/assignments', icon: 'clipboard-check' },
-            { label: 'Collect', to: '/fees/collections', icon: 'wallet' },
-            { label: 'Transactions', to: '/fees/transactions', icon: 'receipt' },
-            { label: 'Online Transactions', to: '/fees/online-transactions', icon: 'credit-card' },
-            { label: 'Amendments', to: '/fees/amendments', icon: 'arrow-path' },
+            { label: 'Group', to: '/groups', icon: 'layers' },
+            { label: 'Type', to: '/types', icon: 'tag' },
+            { label: 'Master', to: '/masters', icon: 'book' },
+            { label: 'Assign', to: '/assignments', icon: 'clipboard-check' },
+            { label: 'Collect', to: '/collections', icon: 'wallet' },
+            { label: 'Transactions', to: '/transactions', icon: 'receipt' },
+            { label: 'Online Transactions', to: '/online-transactions', icon: 'credit-card' },
+            { label: 'Amendments', to: '/amendments', icon: 'arrow-path' },
         ],
     },
     {
@@ -379,23 +370,21 @@ const menuGroups = [
         label: 'Accounts',
         icon: 'bank',
         links: [
-            { label: 'Overview', to: '/accounts', icon: 'chart' },
-            { label: 'Financial Dashboard', to: '/reports/accounting/dashboard', icon: 'chart' },
-            { label: 'Chart of Accounts', to: '/accounts/chart-of-accounts', icon: 'book' },
-            { label: 'Payment Methods', to: '/accounts/payment-methods', icon: 'credit-card' },
-            { label: 'Account Head', to: '/accounts/account-heads', icon: 'document' },
-            { label: 'Income', to: '/accounts/income', icon: 'arrow-up' },
-            { label: 'Expense', to: '/accounts/expense', icon: 'arrow-path' },
-            { label: 'Cash', to: '/accounts/cash', icon: 'wallet' },
-            { label: 'Deposits', to: '/accounts/deposits', icon: 'bank' },
-            { label: 'Payments', to: '/accounts/payments', icon: 'credit-card' },
-            { label: 'Transactions', to: '/accounts/transactions', icon: 'receipt' },
-            { label: 'Suppliers', to: '/accounts/suppliers', icon: 'building' },
-            { label: 'Invoices', to: '/accounts/invoices', icon: 'document' },
-            { label: 'Products', to: '/accounts/product', icon: 'building' },
-            { label: 'Items', to: '/accounts/item', icon: 'tag' },
-            { label: 'Balance', to: '/accounts/balance', icon: 'wallet' },
-            { label: 'Bank Reconciliation', to: '/reports/accounting/bank-reconciliation', icon: 'bank' },
+            { label: 'Overview', to: '/accounting', icon: 'chart' },
+            { label: 'Accounting Dashboard', to: '/accounting/dashboard', icon: 'chart' },
+            { label: 'Chart of Accounts', to: '/chart-of-accounts', icon: 'book' },
+            { label: 'Payment Methods', to: '/payment-methods', icon: 'credit-card' },
+            { label: 'Account Head', to: '/account-heads', icon: 'document' },
+            { label: 'Income', to: '/income', icon: 'arrow-up' },
+            { label: 'Expense', to: '/expense', icon: 'arrow-path' },
+            { label: 'Cash', to: '/cash', icon: 'wallet' },
+            { label: 'Deposits', to: '/deposits', icon: 'bank' },
+            { label: 'Payments', to: '/payments', icon: 'credit-card' },
+            { label: 'Transactions', to: '/account-transactions', icon: 'receipt' },
+            { label: 'Suppliers', to: '/suppliers', icon: 'building' },
+            { label: 'Invoices', to: '/invoices', icon: 'document' },
+            { label: 'Products', to: '/product', icon: 'building' },
+            { label: 'Items', to: '/item', icon: 'tag' },
         ],
     },
     {
@@ -405,6 +394,7 @@ const menuGroups = [
         links: [
             { label: 'Reports home', to: '/reports', icon: 'chart' },
             { label: 'Fees Collection', to: '/reports/fees-collection', icon: 'receipt' },
+            { label: 'Break Down Report', to: '/reports/outstanding-breakdown', icon: 'document' },
             { label: 'Collection Summary', to: '/reports/fees-summary', icon: 'chart' },
             { label: 'Student List', to: '/reports/students', icon: 'users' },
             { label: 'Fees Assignment By Year', to: '/reports/fees-by-year', icon: 'calendar' },
@@ -413,6 +403,8 @@ const menuGroups = [
             { label: 'Marksheet', to: '/reports/marksheet', icon: 'document' },
             { label: 'Merit List', to: '/reports/merit-list', icon: 'sparkles' },
             { label: 'Accounts', to: '/reports/account', icon: 'bank' },
+            { label: 'Bank Reconciliation', to: '/reports/accounting/bank-reconciliation', icon: 'bank' },
+            { label: 'Bank Reconciliation Process', to: '/reports/accounting/bank-reconciliation/process', icon: 'arrow-path' },
         ],
     },
     {
@@ -420,7 +412,6 @@ const menuGroups = [
         label: 'Communication',
         icon: 'megaphone',
         links: [
-            { label: 'Communication home', to: '/communication', icon: 'megaphone' },
             { label: 'Notice Board', to: '/communication/notice-board', icon: 'megaphone' },
             { label: 'SMS / Mail', to: '/communication/smsmail', icon: 'chat' },
             { label: 'SMS Campaign', to: '/communication/smsmail/campaign', icon: 'speaker' },
@@ -478,6 +469,7 @@ const subLinkClass = ({ isActive }) =>
 
 export function AdminLayout({ children }) {
     const loc = useLocation();
+    const [now, setNow] = useState(() => new Date());
     const [sidebarOpen, setSidebarOpen] = useState(() => (typeof window !== 'undefined' ? window.innerWidth >= 1024 : true));
     const [userMenuOpen, setUserMenuOpen] = useState(false);
     const [openGroups, setOpenGroups] = useState(() => {
@@ -502,13 +494,31 @@ export function AdminLayout({ children }) {
         });
     }, [loc.pathname]);
 
+    useEffect(() => {
+        const timer = setInterval(() => setNow(new Date()), 1000);
+        return () => clearInterval(timer);
+    }, []);
+
     const pageTitle = useMemo(() => {
         if (loc.pathname === '/dashboard') return 'Dashboard';
+        if (loc.pathname === '/classes') return '';
+        if (loc.pathname === '/sections') return '';
+        if (loc.pathname === '/subjects') return '';
+        if (loc.pathname === '/subject-assigns') return '';
+        if (loc.pathname === '/time-schedules') return '';
+        if (loc.pathname === '/class-rooms') return '';
+        if (loc.pathname === '/class-routines') return '';
+        if (loc.pathname === '/exam-routines') return '';
+        if (loc.pathname === '/deleted-history') return '';
         const parts = loc.pathname.split('/').filter(Boolean);
         const last = parts[parts.length - 1];
         if (!last) return 'Workspace';
         return last.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
     }, [loc.pathname]);
+
+    const dayLabel = now.toLocaleDateString(undefined, { weekday: 'long' });
+    const dateLabel = now.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    const timeLabel = now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
     const toggleGroup = (i) => {
         setOpenGroups((prev) => ({ ...prev, [i]: !prev[i] }));
@@ -538,11 +548,14 @@ export function AdminLayout({ children }) {
                         sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
                     )}
                 >
-                    <div className="flex h-16 shrink-0 items-center gap-3 border-b border-gray-200 px-4">
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm">
+                    <div className="flex h-16 shrink-0 items-center gap-3 border-b border-gray-200 bg-gradient-to-r from-white to-blue-50/50 px-4">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 to-indigo-700 text-white shadow-md ring-2 ring-blue-500/20">
                             <Icon name="chart" className="h-5 w-5 text-white group-hover:text-white" />
                         </span>
-                        <span className="truncate bg-gradient-to-r from-blue-700 to-blue-600 bg-clip-text text-lg font-bold text-transparent">School Admin</span>
+                        <div className="min-w-0">
+                            <span className="truncate bg-gradient-to-r from-blue-800 to-indigo-700 bg-clip-text text-lg font-bold text-transparent">School Admin</span>
+                            <p className="truncate text-[10px] font-medium uppercase tracking-wide text-gray-400">Workspace</p>
+                        </div>
                     </div>
 
                     <nav className="flex-1 overflow-y-auto py-4">
@@ -641,7 +654,9 @@ export function AdminLayout({ children }) {
                 </aside>
 
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between gap-4 border-b border-gray-200 bg-white px-4 shadow-sm">
+                    <header className="sticky top-0 z-30 shrink-0 border-b border-gray-200 bg-white shadow-sm">
+                        <div className="h-0.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600" aria-hidden />
+                        <div className="flex h-16 items-center justify-between gap-4 px-4">
                         <div className="flex min-w-0 items-center gap-3">
                             <button
                                 type="button"
@@ -652,6 +667,28 @@ export function AdminLayout({ children }) {
                                 <Icon name="bars" />
                             </button>
                             <h1 className="truncate text-lg font-semibold text-gray-800">{pageTitle}</h1>
+                        </div>
+
+                        <div
+                            className="flex min-w-0 flex-1 items-center justify-end gap-2 px-1 sm:justify-center sm:px-2"
+                            aria-live="polite"
+                        >
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-blue-600">
+                                <Icon name="clock" className="h-4 w-4" />
+                            </span>
+                            <div className="min-w-0 text-right sm:text-center">
+                                <p className="truncate text-xs font-semibold tabular-nums text-gray-900 sm:hidden">{timeLabel}</p>
+                                <div className="hidden sm:block">
+                                    <p className="truncate text-[11px] font-semibold uppercase tracking-wide text-gray-500">{dayLabel}</p>
+                                    <p className="truncate text-xs text-gray-600">
+                                        <span className="tabular-nums">{dateLabel}</span>
+                                        <span className="mx-1.5 text-gray-300" aria-hidden>
+                                            ·
+                                        </span>
+                                        <span className="font-semibold tabular-nums text-gray-900">{timeLabel}</span>
+                                    </p>
+                                </div>
+                            </div>
                         </div>
 
                         <div className="relative">
@@ -691,9 +728,10 @@ export function AdminLayout({ children }) {
                                 </>
                             ) : null}
                         </div>
+                        </div>
                     </header>
 
-                    <main className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>
+                    <main className="min-h-0 flex-1 overflow-y-auto bg-gradient-to-b from-gray-50/80 to-gray-100 p-4 sm:p-6">{children}</main>
                 </div>
             </div>
 

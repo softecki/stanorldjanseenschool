@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Fees;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Fees\Master\FeesMasterQuartersUpdateRequest;
 use App\Http\Requests\Fees\Master\FeesMasterStoreRequest;
 use App\Http\Requests\Fees\Master\FeesMasterUpdateRequest;
 use App\Interfaces\Fees\FeesGroupInterface;
@@ -46,11 +47,39 @@ class FeesMasterController extends Controller
         return view('backend.fees.master.fees-types', compact('types'))->render();
     }
 
+    public function quartersOverview(Request $request): JsonResponse
+    {
+        $data['title'] = ___('fees.fees_master');
+        $data['fees_masters'] = $this->repo->quartersOverview();
+        if ($request->expectsJson()) {
+            return response()->json(['data' => $data['fees_masters'], 'meta' => ['title' => $data['title']]]);
+        }
+
+        return redirect()->to(url('/app/fees/masters'));
+    }
+
+    public function quartersUpdate(FeesMasterQuartersUpdateRequest $request, int $id): JsonResponse|RedirectResponse
+    {
+        $result = $this->repo->syncMasterQuarters($id, $request->input('amounts', []));
+        if ($result['status']) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $result['message']]);
+            }
+
+            return redirect()->route('fees-master.index')->with('success', $result['message']);
+        }
+        if ($request->expectsJson()) {
+            return response()->json(['message' => $result['message']], 422);
+        }
+
+        return back()->with('danger', $result['message']);
+    }
+
     public function create(Request $request): JsonResponse|RedirectResponse
     {
-        $data['title']        = ___('fees.fees_master');
-        $data['fees_types']   = $this->type->all();
-        $data['fees_groups']  = $this->group->all();
+        $data['title'] = ___('fees.fees_master');
+        $data['fees_types'] = $this->type->all();
+        $data['fees_groups'] = $this->group->all();
         if ($request->expectsJson()) {
             return response()->json(['meta' => $data]);
         }
@@ -60,27 +89,35 @@ class FeesMasterController extends Controller
 
     public function store(FeesMasterStoreRequest $request): JsonResponse|RedirectResponse
     {
-        // dd($request->all());
         $result = $this->repo->store($request);
-        if($result['status']){
+        if ($result['status']) {
             if ($request->expectsJson()) {
                 return response()->json(['message' => $result['message']]);
             }
+
             return redirect()->route('fees-master.index')->with('success', $result['message']);
         }
         if ($request->expectsJson()) {
             return response()->json(['message' => $result['message']], 422);
         }
+
         return back()->with('danger', $result['message']);
     }
 
     public function edit(Request $request, $id): JsonResponse|RedirectResponse
     {
-        $data['title']        = ___('fees.fees_master');
-        $data['fees_master']  = $this->repo->show($id);
-        $data['fees_types']   = $this->type->all();
-        $data['fees_groups']  = $this->group->all();
-        // dd($data);
+        $feesMaster = $this->repo->show($id);
+        if ($feesMaster === null) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => ___('alert.no_data_found')], 404);
+            }
+            abort(404);
+        }
+
+        $data['title'] = ___('fees.fees_master');
+        $data['fees_master'] = $feesMaster;
+        $data['fees_types'] = $this->type->all();
+        $data['fees_groups'] = $this->group->all();
         if ($request->expectsJson()) {
             return response()->json([
                 'data' => $data['fees_master'],
@@ -98,15 +135,17 @@ class FeesMasterController extends Controller
     public function update(FeesMasterUpdateRequest $request, $id): JsonResponse|RedirectResponse
     {
         $result = $this->repo->update($request, $id);
-        if($result['status']){
+        if ($result['status']) {
             if ($request->expectsJson()) {
                 return response()->json(['message' => $result['message']]);
             }
+
             return redirect()->route('fees-master.index')->with('success', $result['message']);
         }
         if ($request->expectsJson()) {
             return response()->json(['message' => $result['message']], 422);
         }
+
         return back()->with('danger', $result['message']);
     }
 

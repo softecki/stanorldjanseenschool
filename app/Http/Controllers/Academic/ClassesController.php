@@ -31,7 +31,7 @@ class ClassesController extends Controller
     public function index(Request $request): JsonResponse|View
     {
         $data['class'] = $this->classes->getAll();
-        $data['title'] = ___('academic.class');
+        $data['title'] = '';
         if ($request->expectsJson()) {
             return response()->json(['data' => $data['class'], 'meta' => ['title' => $data['title']]]);
         }

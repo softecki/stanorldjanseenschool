@@ -24,23 +24,12 @@ class StudentStoreRequest extends FormRequest
      */
     public function rules()
     {
-        $mobile = '';
-        if (Request()->mobile != '') {
-            $mobile = 'max:255|unique:users,phone';
-        }
-
-        $email = '';
-        if (Request()->email != '') {
-            $email = 'max:255|unique:users,email';
-        }
-
         return [
-            // 'mobile'                    => $mobile,
-            // 'email'                     => $email,
             // 'admission_no'              => 'required|max:255|unique:students,admission_no',
             // 'roll_no'                   => 'required|max:255',
             'first_name'                => 'required|max:255',
             'last_name'                 => 'required|max:255',
+            'mobile'                    => 'required|max:255',
             'class'                     => 'required|max:255',
             'section'                   => 'required|max:255',
 //            'date_of_birth'             => 'required|max:255',

@@ -27,7 +27,7 @@ import {
 
 export function ExpensePage({ Layout }) {
     return (
-        <AccountsCrudListPage Layout={Layout} title="Expense" subtitle="Recorded expense entries." endpoint="/expense" createTo="/accounts/expense/create" />
+        <AccountsCrudListPage Layout={Layout} title="Expense" subtitle="Recorded expense entries." endpoint="/expense" createTo="/expense/create" />
     );
 }
 

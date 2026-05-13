@@ -34,6 +34,8 @@ Route::middleware(saasMiddleware())->group(function () {
                 });
     
                 Route::controller(FeesMasterController::class)->prefix('fees-master')->group(function () {
+                    Route::get('/quarters-overview', 'quartersOverview')->name('fees-master.quarters-overview')->middleware('PermissionCheck:fees_master_read');
+                    Route::put('/{id}/quarters',    'quartersUpdate')->name('fees-master.quarters.update')->middleware('PermissionCheck:fees_master_update', 'DemoCheck');
                     Route::get('/',                 'index')->name('fees-master.index')->middleware('PermissionCheck:fees_master_read');
                     Route::get('/create',           'create')->name('fees-master.create')->middleware('PermissionCheck:fees_master_create');
                     Route::post('/store',           'store')->name('fees-master.store')->middleware('PermissionCheck:fees_master_create', 'DemoCheck');
@@ -58,6 +60,7 @@ Route::middleware(saasMiddleware())->group(function () {
                 });
     
                 Route::controller(FeesCollectController::class)->prefix('fees-collect')->group(function () {
+                    Route::get('/collect-workbench', 'collectWorkbench')->name('fees-collect.collect-workbench')->middleware('PermissionCheck:fees_collect_read');
                     Route::get('/',                 'index')->name('fees-collect.index')->middleware('PermissionCheck:fees_collect_read');
                     Route::get('/create',           'create')->name('fees-collect.create')->middleware('PermissionCheck:fees_collect_create');
                     Route::post('/store',           'store')->name('fees-collect.store')->middleware('PermissionCheck:fees_collect_create', 'DemoCheck');
@@ -69,6 +72,7 @@ Route::middleware(saasMiddleware())->group(function () {
                     Route::delete('/deleteFees/{id}',   'deleteFees')->name('fees-collect.deleteFees')->middleware('PermissionCheck:fees_collect_delete', 'DemoCheck');
                     Route::get('/cancelled-collect-list', 'cancelledCollectList')->name('fees-collect.cancelled-list')->middleware('PermissionCheck:fees_collect_read');
                     Route::get('/collect/{id}',     'collect')->name('fees-collect.collect')->middleware('PermissionCheck:fees_collect_update');
+                    Route::get('/collect-embed/{id}', 'collectEmbed')->name('fees-collect.collect-embed')->middleware('PermissionCheck:fees_collect_update');
 
                     Route::get('/collect-list',     'collect_list')->name('fees-collect.collect-list')->middleware('PermissionCheck:fees_collect_update');
                     Route::get('/collect-transactions',     'collect_transactions')->name('fees-collect.collect-transactions')->middleware('PermissionCheck:fees_collect_update');

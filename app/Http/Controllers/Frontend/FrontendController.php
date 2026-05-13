@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Frontend;
 
 use PDF;
+use App\Support\PublicSiteMeta;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
@@ -18,6 +19,7 @@ use App\Repositories\Academic\ShiftRepository;
 use App\Repositories\StudentInfo\StudentRepository;
 use App\Repositories\StudentInfo\OnlineAdmissionSettingRepository;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Contracts\View\View;
 
 class FrontendController extends Controller
 {
@@ -53,7 +55,7 @@ class FrontendController extends Controller
         $this->shift_repo        = $shift_repo;
     }
 
-    public function index(Request $request): JsonResponse|\Illuminate\Contracts\View\View
+    public function index(Request $request): JsonResponse|View
     {
         $data['sliders']          = $this->repo->sliders();
         $data['counters']         = $this->repo->counters();
@@ -63,9 +65,9 @@ class FrontendController extends Controller
         $data['comingEvents']     = $this->repo->comingEvents();
 
         if ($request->expectsJson()) {
-            return response()->json(['data' => $data, 'meta' => ['title' => 'Home']]);
+            return response()->json(['data' => $data, 'meta' => PublicSiteMeta::page('Home')]);
         }
-        return view('frontend.home', compact('data'));
+        return view('spa.app');
     }
 
     // Result
@@ -82,17 +84,18 @@ class FrontendController extends Controller
         $result = $this->repo->getExamType($request);
         return response()->json($result, 200);
     }
-    public function result(Request $request): JsonResponse|\Illuminate\Contracts\View\View
+    public function result(Request $request): JsonResponse|View
     {
         $data = $this->repo->result();
         $data['result'] = null;
         if ($request->expectsJson()) {
-            return response()->json(['data' => $data, 'meta' => ['title' => 'Result']]);
+            return response()->json(['data' => $data, 'meta' => PublicSiteMeta::page('Result')]);
         }
-        return view('frontend.result', compact('data'));
+        return view('spa.app');
     }
 
-    public function searchResult(SearchResultRequest $request): JsonResponse|\Illuminate\Contracts\View\View{
+    public function searchResult(SearchResultRequest $request): JsonResponse|View
+    {
         $data = $this->repo->searchResult($request);
         if(!$data)
         {
@@ -101,13 +104,13 @@ class FrontendController extends Controller
             if ($request->expectsJson()) {
                 return response()->json(['data' => $data, 'message' => 'Result not found'], 404);
             }
-            return view('frontend.result', compact('data'));
+            return view('spa.app');
         }
         $data['request'] = $request;
         if ($request->expectsJson()) {
             return response()->json(['data' => $data, 'message' => 'Result found']);
         }
-        return view('frontend.search_result', compact('data'));
+        return view('spa.app');
     }
 
     public function downloadPDF($id, $type, $class, $section)
@@ -126,118 +129,120 @@ class FrontendController extends Controller
         return $pdf->download('marksheet'.'_'.date('d_m_Y').'_'.@$data['student']->first_name .'_'. @$data['student']->last_name .'.pdf');
     }
 
-    public function about(Request $request): JsonResponse|\Illuminate\Contracts\View\View
+    public function about(Request $request): JsonResponse|View
     {
         $data = $this->repo->abouts();
         if ($request->expectsJson()) {
-            return response()->json(['data' => $data, 'meta' => ['title' => 'About']]);
+            return response()->json(['data' => $data, 'meta' => PublicSiteMeta::page('About')]);
         }
-        return view('frontend.about', compact('data'));
+        return view('spa.app');
     }
 
     // Blog
-    public function news(Request $request): JsonResponse|\Illuminate\Contracts\View\View
+    public function news(Request $request): JsonResponse|View
     {
         $data['news'] = $this->repo->news();
         if ($request->expectsJson()) {
-            return response()->json(['data' => $data, 'meta' => ['title' => 'News']]);
+            return response()->json(['data' => $data, 'meta' => PublicSiteMeta::page('News')]);
         }
-        return view('frontend.news', compact('data'));
+        return view('spa.app');
     }
-    public function newsDetail(Request $request, $id): JsonResponse|\Illuminate\Contracts\View\View
+    public function newsDetail(Request $request, $id): JsonResponse|View
     {
         $data['allNews'] = $this->repo->news();
         $data['news']    = $this->repo->newsDetail($id);
         if ($request->expectsJson()) {
-            return response()->json(['data' => $data, 'meta' => ['title' => 'News detail']]);
+            return response()->json(['data' => $data, 'meta' => PublicSiteMeta::page('News detail')]);
         }
-        return view('frontend.news-detail', compact('data'));
+        return view('spa.app');
     }
 
     // Event
-    public function events(Request $request): JsonResponse|\Illuminate\Contracts\View\View
+    public function events(Request $request): JsonResponse|View
     {
         $events = $this->repo->events();
         if ($request->expectsJson()) {
-            return response()->json(['data' => ['events' => $events], 'meta' => ['title' => 'Events']]);
+            return response()->json(['data' => ['events' => $events], 'meta' => PublicSiteMeta::page('Events')]);
         }
-        return view('frontend.events', compact('events'));
+        return view('spa.app');
     }
-    public function eventDetail(Request $request, $id): JsonResponse|\Illuminate\Contracts\View\View
+    public function eventDetail(Request $request, $id): JsonResponse|View
     {
         $data['allEvent'] = $this->repo->events();
         $data['event']    = $this->repo->eventDetail($id);
         if ($request->expectsJson()) {
-            return response()->json(['data' => $data, 'meta' => ['title' => 'Event detail']]);
+            return response()->json(['data' => $data, 'meta' => PublicSiteMeta::page('Event detail')]);
         }
-        return view('frontend.event-detail', compact('data'));
+        return view('spa.app');
     }
 
 
-    public function page(Request $request, $slug): JsonResponse|\Illuminate\Contracts\View\View
+    public function page(Request $request, $slug): JsonResponse|View
     {
         $data['page']    = $this->pageRepo->findBySlug($slug);
         if ($request->expectsJson()) {
-            return response()->json(['data' => $data, 'meta' => ['title' => 'Page']]);
+            return response()->json(['data' => $data, 'meta' => PublicSiteMeta::page('Page')]);
         }
-        return view('frontend.page-detail', compact('data'));
+        return view('spa.app');
     }
 
 
     // Event
-    public function notices(Request $request): JsonResponse|\Illuminate\Contracts\View\View
+    public function notices(Request $request): JsonResponse|View
     {
         $data['notices'] = $this->repo->notices();
         if ($request->expectsJson()) {
-            return response()->json(['data' => $data, 'meta' => ['title' => 'Notices']]);
+            return response()->json(['data' => $data, 'meta' => PublicSiteMeta::page('Notices')]);
         }
-        return view('frontend.notices', compact('data'));
+        return view('spa.app');
     }
-    public function noticeDetail(Request $request, $id): JsonResponse|\Illuminate\Contracts\View\View
+    public function noticeDetail(Request $request, $id): JsonResponse|View
     {
         $data['allNotice'] = $this->repo->notices();
         $data['notice-board']    = $this->repo->noticeDetail($id);
         if ($request->expectsJson()) {
-            return response()->json(['data' => $data, 'meta' => ['title' => 'Notice detail']]);
+            return response()->json(['data' => $data, 'meta' => PublicSiteMeta::page('Notice detail')]);
         }
-        return view('frontend.notice-detail', compact('data'));
+        return view('spa.app');
     }
 
     // Contact
-    public function contact(Request $request): JsonResponse|\Illuminate\Contracts\View\View
+    public function contact(Request $request): JsonResponse|View
     {
         $data['contactInfo']    = $this->repo->contactInfo();
         $data['depContact']     = $this->repo->depContact();
         if ($request->expectsJson()) {
-            return response()->json(['data' => $data, 'meta' => ['title' => 'Contact']]);
+            return response()->json(['data' => $data, 'meta' => PublicSiteMeta::page('Contact')]);
         }
-        return view('frontend.contact', compact('data'));
+        return view('spa.app');
     }
 
     // onlineAdmission
-    public function onlineAdmission()
+    public function onlineAdmission(Request $request): JsonResponse|View
     {
         $data = $this->repo->result();
         $data['religions']= $this->religionRepo->all();
         $data['genders']  = $this->genderRepo->all();
         $data['shifts']  = $this->shift_repo->all();
         $data['setting']  = $this->admission_setting_repo->getIsShowByType('online_admission');
-        return view('frontend.online-admission', compact('data'));
+        if ($request->expectsJson()) {
+            return response()->json(['data' => $data, 'meta' => PublicSiteMeta::page('Online Admission')]);
+        }
+        return view('spa.app');
     }
 
 
         // onlineAdmission
-        public function onlineAdmissionFees($student_phone, $admission_id)
+        public function onlineAdmissionFees(Request $request, $student_phone, $admission_id): JsonResponse|View
         {
             $data['admission'] = $this->repo->onlineAdmissionDetail($admission_id);
             $data['setting']  = $this->admission_setting_repo->getIsShowByType('online_admission');
             $data['fees'] = $this->repo->onlineAdmissionFees($data['admission']->session_id, $data['admission']->classes_id , $data['admission']->section_id);
             $data['payment_instruction'] = $this->admission_setting_repo->getOneByFied('admission_payment_info');
-            if($data['admission']->payment_status == 2 && $data['fees']){
-                return view('frontend.online-admission-fees', compact('data'));
+            if ($request->expectsJson()) {
+                return response()->json(['data' => $data, 'meta' => PublicSiteMeta::page('Admission Fees')]);
             }
-
-            return view('frontend.online-admission-fees', compact('data'));
+            return view('spa.app');
         }
 
     public function storeOnlineAdmission(Request $request) {
@@ -246,10 +251,30 @@ class FrontendController extends Controller
         $fees = $this->repo->onlineAdmissionFees($admission->session_id, $admission->classes_id , $admission->section_id);
         $payment_setting = $this->admission_setting_repo->getOneByFied('admission_payment');
 
-        if($admission && $fees && $payment_setting->is_show == 1){
-            return redirect()->route('frontend.online-admission-fees',[$admission->reference_no , $admission->id])->with('message' , 'Admission Inform submitted successfully , Please wait for school approval');
+        $successMsg = 'Admission Inform submitted successfully, Please wait for school approval';
+        $successMsgFees = 'Admission Inform submitted successfully , Please wait for school approval';
+
+        if ($request->expectsJson()) {
+            if ($admission && $fees && $payment_setting->is_show == 1) {
+                return response()->json([
+                    'message' => $successMsgFees,
+                    'redirect' => url('/online-admission-fees/'.$admission->reference_no.'/'.$admission->id),
+                    'reference_no' => $admission->reference_no,
+                    'admission_id' => $admission->id,
+                ]);
+            }
+            return response()->json([
+                'message' => $successMsg,
+                'redirect' => url('/online-admission'),
+                'reference_no' => $admission->reference_no ?? null,
+                'admission_id' => $admission->id ?? null,
+            ]);
         }
-        return redirect()->back()->with('message' , 'Admission Inform submitted successfully, Please wait for school approval');
+
+        if($admission && $fees && $payment_setting->is_show == 1){
+            return redirect()->route('frontend.online-admission-fees',[$admission->reference_no , $admission->id])->with('message' , $successMsgFees);
+        }
+        return redirect()->back()->with('message' , $successMsg);
 
     }
 
@@ -260,13 +285,26 @@ class FrontendController extends Controller
         ]);
 
         if ($validator->fails()) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => $validator->errors()->first(),
+                    'errors' => $validator->errors(),
+                ], 422);
+            }
             return redirect()->back()->withErrors($validator)->withInput();
         }
 
         $admission = $this->repo->storeOnlineAdmissionFees($request);
 
         if($admission){
-            return redirect()->route('frontend.online-admission')->with('message' , 'Admission Inform submitted successfully , Please complete payment for successfully admission');
+            $msg = 'Admission Inform submitted successfully , Please complete payment for successfully admission';
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => $msg,
+                    'redirect' => url('/online-admission'),
+                ]);
+            }
+            return redirect()->route('frontend.online-admission')->with('message' , $msg);
         }
     }
 

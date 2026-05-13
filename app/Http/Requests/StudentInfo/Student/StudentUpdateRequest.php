@@ -34,18 +34,33 @@ class StudentUpdateRequest extends FormRequest
 //        }
        
         return [
-            // 'mobile'                    => 'required|max:255',
-//            'email'                     => $email,
-            // 'admission_no'              => 'required|max:255|unique:students,admission_no,'.$this->id,
-//            'roll_no'                   => 'required|max:255',
+            'id'                        => 'required|integer|exists:students,id',
             'first_name'                => 'required|max:255',
             'last_name'                 => 'required|max:255',
             'class'                     => 'required|max:255',
             'section'                   => 'required|max:255',
-//            'date_of_birth'             => 'required|max:255',
-//            'admission_date'            => 'required|max:255',
-            'parent'                    => 'required|max:255',
-            'status'                    => 'required|max:255'
+            'mobile'                    => 'required|max:255',
+            'status'                    => 'required|max:255',
+            'admission_no'              => 'nullable|max:255',
+            'roll_no'                   => 'nullable|max:255',
+            'email'                     => 'nullable|max:255',
+            'date_of_birth'             => 'nullable|date',
+            'admission_date'            => 'nullable|date',
+            'religion'                  => 'nullable|max:255',
+            'gender'                    => 'nullable|max:255',
+            'blood_group'               => 'nullable|max:255',
+            'category'                  => 'nullable|max:255',
+            'previous_school'          => 'nullable|max:255',
+            'previous_school_info'     => 'nullable|string',
+            'residance_address'        => 'nullable|string',
+            'place_of_birth'           => 'nullable|max:255',
+            'nationality'              => 'nullable|max:255',
+            'cpr_no'                   => 'nullable|max:255',
+            'spoken_lang_at_home'      => 'nullable|max:255',
+            'sms_send'                 => 'nullable|max:10',
+            'sms_send_description'     => 'nullable|string',
+            'control_number'           => 'nullable|max:255',
+            'shift_id'                 => 'nullable|max:255',
         ];
         
     }

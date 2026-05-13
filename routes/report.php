@@ -24,14 +24,18 @@ Route::middleware(saasMiddleware())->group(function () {
                 Route::controller(MarksheetController::class)->prefix('report-marksheet')->group(function () {
                     Route::get('/', 'index')->name('report-marksheet.index')->middleware('PermissionCheck:report_marksheet_read');
                     Route::post('/search', 'search')->name('marksheet.search')->middleware('PermissionCheck:report_marksheet_read');
+                    Route::get('/sections/{class}', 'sections')->name('report-marksheet.sections')->middleware('PermissionCheck:report_marksheet_read');
                     Route::get('/get-students', 'getStudents');
                     Route::get('/pdf-generate/{id}/{type}/{class}/{section}', 'generatePDF')->name('report-marksheet.pdf-generate');
+                    Route::get('/excel-generate/{id}/{type}/{class}/{section}', 'generateExcel')->name('report-marksheet.excel-generate');
                 });
 
                 Route::controller(MeritListController::class)->prefix('report-merit-list')->group(function () {
                     Route::get('/', 'index')->name('report-merit-list.index')->middleware('PermissionCheck:report_merit_list_read');
                     Route::any('/search', 'search')->name('merit-list.search')->middleware('PermissionCheck:report_merit_list_read');
+                    Route::get('/sections/{class}', 'sections')->name('report-merit-list.sections')->middleware('PermissionCheck:report_merit_list_read');
                     Route::get('/pdf-generate/{type}/{class}/{section}', 'generatePDF')->name('report-merit-list.pdf-generate');
+                    Route::get('/excel-generate/{type}/{class}/{section}', 'generateExcel')->name('report-merit-list.excel-generate');
                 });
 
                 Route::controller(ProgressCardController::class)->prefix('report-progress-card')->group(function () {
@@ -50,6 +54,7 @@ Route::middleware(saasMiddleware())->group(function () {
                 Route::controller(FeesCollectionController::class)->prefix('report-fees-collection')->group(function () {
                     Route::get('/', 'index')->name('report-fees-collection.index')->middleware('PermissionCheck:report_fees_collection_read');
                     Route::any('/search', 'search')->name('fees-collection.search')->middleware('PermissionCheck:report_fees_collection_read');
+                    Route::get('/sections/{class}', 'sections')->name('report-fees-collection.sections')->middleware('PermissionCheck:report_fees_collection_read');
                     Route::get('/pdf-generate/{class}/{section}/{dates}', 'generatePDF')->name('report-fees-collection.pdf-generate');
                     Route::get('/excel-generate/{class}/{section}/{dates}', 'generateExcel')->name('report-fees-collection.excel-generate');
                 });
@@ -58,16 +63,22 @@ Route::middleware(saasMiddleware())->group(function () {
                 Route::controller(FeesCollectionController::class)->prefix('report-fees-summary')->group(function () {
                     Route::get('/', 'feeSummary')->name('report-fees-summary.index')->middleware('PermissionCheck:report_fees_collection_read');
                     Route::any('/search', 'searchFeeSummary')->name('report-fees-summary.search')->middleware('PermissionCheck:report_fees_collection_read');
-                    Route::get('/pdf-generate/{class?}/{section?}/{dates?}', 'generatePDF')->name('report-fees-summary.pdf-generate');
-                    Route::get('/excel-generate/{class?}/{section?}/{dates?}/{fee_group_id?}/{amount?}/{year?}', 'generateSummaryExcel')->name('report-fees-summary.excel-generate');
+                    Route::get('/pdf-generate', 'generateSummaryPDF')->name('report-fees-summary.pdf-generate');
+                    Route::get('/excel-generate', 'generateSummaryExcelReport')->name('report-fees-summary.excel-generate');
+                });
+
+                Route::controller(FeesCollectionController::class)->prefix('report-outstanding-breakdown')->group(function () {
+                    Route::get('/', 'outstandingBreakdown')->name('report-outstanding-breakdown.index')->middleware('PermissionCheck:report_fees_collection_read');
+                    Route::get('/pdf-generate', 'outstandingBreakdownPdf')->name('report-outstanding-breakdown.pdf-generate')->middleware('PermissionCheck:report_fees_collection_read');
+                    Route::get('/excel-generate', 'outstandingBreakdownExcel')->name('report-outstanding-breakdown.excel-generate')->middleware('PermissionCheck:report_fees_collection_read');
                 });
 
 
                 Route::controller(FeesCollectionController::class)->prefix('report-students')->group(function () {
                     Route::get('/', 'students')->name('report-students.index')->middleware('PermissionCheck:report_fees_collection_read');
                     Route::any('/search', 'searchStudents')->name('report-students.search')->middleware('PermissionCheck:report_fees_collection_read');
-                    Route::get('/pdf-generate/{class}', 'generatePDF')->name('report-students.pdf-generate');
-                    Route::get('/excel-generate/{class}', 'generateStudentsExcel')->name('report-students.excel-generate');
+                    Route::get('/pdf-generate', 'generateStudentsPDF')->name('report-students.pdf-generate');
+                    Route::get('/excel-generate', 'generateStudentsExcel')->name('report-students.excel-generate');
                 });
 
                 Route::controller(FeesCollectionController::class)->prefix('report-fees-by-year')->group(function () {
@@ -83,6 +94,8 @@ Route::middleware(saasMiddleware())->group(function () {
                 Route::controller(FeesCollectionController::class)->prefix('report-boarding-students')->group(function () {
                     Route::get('/', 'boardingStudents')->name('report-boarding-students.index')->middleware('PermissionCheck:report_fees_collection_read');
                     Route::any('/search', 'searchBoardingStudents')->name('report-boarding-students.search')->middleware('PermissionCheck:report_fees_collection_read');
+                    Route::get('/pdf-generate', 'generateBoardingStudentsPDF')->name('report-boarding-students.pdf-generate')->middleware('PermissionCheck:report_fees_collection_read');
+                    Route::get('/excel-generate', 'generateBoardingStudentsExcel')->name('report-boarding-students.excel-generate')->middleware('PermissionCheck:report_fees_collection_read');
                     Route::post('/update-fees-2026', 'updateBoardingSchoolFees2026')->name('report-boarding-students.update-fees-2026')->middleware('PermissionCheck:report_fees_collection_read');
                     Route::get('/find-missing-2026', 'findMissingBoardingStudents2026')->name('report-boarding-students.find-missing-2026')->middleware('PermissionCheck:report_fees_collection_read');
                     Route::post('/create-missing-fees-2026', 'createMissingBoardingSchoolFees2026')->name('report-boarding-students.create-missing-fees-2026')->middleware('PermissionCheck:report_fees_collection_read');
@@ -92,7 +105,8 @@ Route::middleware(saasMiddleware())->group(function () {
                     Route::get('/', 'index')->name('report-account.index')->middleware('PermissionCheck:report_account_read');
                     Route::any('/search', 'search')->name('account.search')->middleware('PermissionCheck:report_account_read');
                     Route::get('/get-account-types', 'getAccountTypes');
-                    Route::post('/pdf-generate', 'generatePDF')->name('report-account.pdf-generate');
+                    Route::match(['get', 'post'], '/pdf-generate', 'generatePDF')->name('report-account.pdf-generate');
+                    Route::get('/excel-generate', 'generateExcel')->name('report-account.excel-generate');
                 });
 
                 Route::controller(AttendanceController::class)->prefix('report-attendance')->group(function () {
@@ -116,6 +130,8 @@ Route::middleware(saasMiddleware())->group(function () {
                 Route::controller(DuplicateStudentsController::class)->prefix('report-duplicate-students')->group(function () {
                     Route::get('/', 'index')->name('report-duplicate-students.index')->middleware('PermissionCheck:report_fees_collection_read');
                     Route::post('/search', 'search')->name('report-duplicate-students.search')->middleware('PermissionCheck:report_fees_collection_read');
+                    Route::get('/pdf-generate', 'generatePDF')->name('report-duplicate-students.pdf-generate')->middleware('PermissionCheck:report_fees_collection_read');
+                    Route::get('/excel-generate', 'generateExcel')->name('report-duplicate-students.excel-generate')->middleware('PermissionCheck:report_fees_collection_read');
                 });
 
             });

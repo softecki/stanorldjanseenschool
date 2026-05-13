@@ -23,19 +23,19 @@ class StorageUpdateRequest extends FormRequest
      */
     public function rules()
     {
-        if(\Request::get('file_system') == 's3'){
+        if ($this->input('file_system') === 's3') {
             return [
-                'aws_access_key_id' => 'required',
-                'aws_secret_key' => 'required',
-                'aws_region' => 'required',
-                'aws_bucket' => 'required',
-                'aws_endpoint' => 'required'
+                'file_system' => 'required|in:local,s3',
+                'aws_access_key_id' => 'required|string|max:500',
+                'aws_secret_key' => 'required|string|max:500',
+                'aws_region' => 'required|string|max:100',
+                'aws_bucket' => 'required|string|max:255',
+                'aws_endpoint' => 'required|string|max:500',
             ];
         }
 
         return [
-            'file_system' => 'required',
+            'file_system' => 'required|in:local,s3',
         ];
-        
     }
 }

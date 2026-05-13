@@ -32,7 +32,7 @@ class AccountHeadController extends Controller
         if ($request->expectsJson()) {
             return response()->json(['data' => $data['account_head'], 'meta' => ['title' => $data['title']]]);
         }
-        return view('backend.accounts.head.index', compact('data'));
+        return redirect()->to(url('/app/account-heads'));
     }
 
     public function create(Request $request): JsonResponse|RedirectResponse
@@ -41,7 +41,17 @@ class AccountHeadController extends Controller
         if ($request->expectsJson()) {
             return response()->json(['meta' => ['title' => $data['title']]]);
         }
-        return redirect()->to(url('/app/accounts/account-heads/create'));
+        return redirect()->to(url('/app/account-heads/create'));
+    }
+
+    public function show(Request $request, $id): JsonResponse|RedirectResponse
+    {
+        $data['account_head'] = $this->headRepo->show($id);
+        $data['title'] = __('Account Head Details');
+        if ($request->expectsJson()) {
+            return response()->json(['data' => $data['account_head'], 'meta' => ['title' => $data['title']]]);
+        }
+        return redirect()->to(url('/app/account-heads/'.$id));
     }
 
     public function store(AccountHeadStoreRequest $request): JsonResponse|RedirectResponse
@@ -66,7 +76,7 @@ class AccountHeadController extends Controller
         if ($request->expectsJson()) {
             return response()->json(['data' => $data['account_head'], 'meta' => ['title' => $data['title']]]);
         }
-        return redirect()->to(url('/app/accounts/account-heads/'.$id.'/edit'));
+        return redirect()->to(url('/app/account-heads/'.$id.'/edit'));
     }
 
     public function update(AccountHeadUpdateRequest $request, $id): JsonResponse|RedirectResponse

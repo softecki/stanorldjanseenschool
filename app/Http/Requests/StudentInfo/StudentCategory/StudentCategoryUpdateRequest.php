@@ -23,11 +23,13 @@ class StudentCategoryUpdateRequest extends FormRequest
      */
     public function rules()
     {
+        $id = $this->route('id');
+
         return [
-            'name'        => 'required|max:255|unique:student_categories,name,'.Request()->id,
-            'description' => 'nullable|string|max:5000',
-            'shortcode'   => 'nullable|string|max:50',
-            'status'      => 'required'
+            'name'         => 'required|max:255|unique:student_categories,name,'.$id,
+            'description'  => 'nullable|string|max:5000',
+            'shortcode'    => 'nullable|string|max:50',
+            'status'       => 'required|max:255',
         ];
     }
 }

@@ -7,7 +7,7 @@ export function FullPageLoader(props) {
 
 export function mappedClassOptions(classes = []) {
     return classes.map((c) => ({
-        id: c?.class?.id ?? c?.id,
+        id: c?.classes_id ?? c?.class?.id ?? c?.id,
         name: c?.class?.name ?? c?.name ?? '-',
     })).filter((c) => c.id);
 }

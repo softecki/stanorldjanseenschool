@@ -609,7 +609,7 @@ class SmsMailLogRepository implements SmsMailLogInterface
             } else {
 
                 $row->mail_description     = $request->mail_description;
-                $row->attachment           = $this->UploadImageCreate($request->attachment, 'backend/uploads/communication', $row->attachment);
+                $row->attachment           = $this->UploadImageUpdate($request->attachment, 'backend/uploads/communication', $row->attachment);
             }
             $row->save();
             

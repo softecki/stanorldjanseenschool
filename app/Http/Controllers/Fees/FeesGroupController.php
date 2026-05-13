@@ -46,24 +46,33 @@ class FeesGroupController extends Controller
 
     public function store(FeesGroupStoreRequest $request): JsonResponse|RedirectResponse
     {
-       
         $result = $this->repo->store($request);
-        if($result['status']){
+        if ($result['status']) {
             if ($request->expectsJson()) {
                 return response()->json(['message' => $result['message']]);
             }
+
             return redirect()->route('fees-group.index')->with('success', $result['message']);
         }
         if ($request->expectsJson()) {
             return response()->json(['message' => $result['message']], 422);
         }
+
         return back()->with('danger', $result['message']);
     }
 
     public function edit(Request $request, $id): JsonResponse|RedirectResponse
     {
-        $data['fees_group']        = $this->repo->show($id);
-        $data['title']       = ___('fees.fees_group');
+        $feesGroup = $this->repo->show($id);
+        if ($feesGroup === null) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => ___('alert.no_data_found')], 404);
+            }
+            abort(404);
+        }
+
+        $data['fees_group'] = $feesGroup;
+        $data['title'] = ___('fees.fees_group');
         if ($request->expectsJson()) {
             return response()->json(['data' => $data['fees_group'], 'meta' => ['title' => $data['title']]]);
         }
@@ -74,15 +83,17 @@ class FeesGroupController extends Controller
     public function update(FeesGroupUpdateRequest $request, $id): JsonResponse|RedirectResponse
     {
         $result = $this->repo->update($request, $id);
-        if($result['status']){
+        if ($result['status']) {
             if ($request->expectsJson()) {
                 return response()->json(['message' => $result['message']]);
             }
+
             return redirect()->route('fees-group.index')->with('success', $result['message']);
         }
         if ($request->expectsJson()) {
             return response()->json(['message' => $result['message']], 422);
         }
+
         return back()->with('danger', $result['message']);
     }
 

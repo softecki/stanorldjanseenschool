@@ -28,6 +28,8 @@ use Maatwebsite\Excel\Facades\Excel;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use Illuminate\Support\Facades\Validator;
 use App\Models\StudentInfo\Student;
+use App\Models\Fees\FeesType;
+use App\Models\Fees\FeesGroup;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
@@ -160,7 +162,7 @@ class StudentController extends Controller
     }
 
 
-    public function upload()
+    public function upload(Request $request): JsonResponse|View
     {
         $data['title']     = ___('student_info.student_create');
         $data['classes']   = $this->classRepo->assignedAll();
@@ -171,13 +173,34 @@ class StudentController extends Controller
         $data['religions']    = $this->religionRepo->all();
         $data['genders']      = $this->genderRepo->all();
         $data['categories']   = $this->categoryRepo->all();
+        $data['fee_types']    = FeesType::query()
+            ->leftJoin('fees_masters', function ($join) {
+                $join->on('fees_masters.fees_type_id', '=', 'fees_types.id')
+                    ->where('fees_masters.session_id', '=', setting('session'));
+            })
+            ->select('fees_types.id', 'fees_types.name', 'fees_types.class_id', 'fees_masters.fees_group_id')
+            ->orderBy('fees_types.name')
+            ->distinct()
+            ->get();
+        $data['fee_groups']   = FeesGroup::query()->select('id', 'name')->orderBy('name')->get();
+
+        if ($request->expectsJson()) {
+            return response()->json(['meta' => $data]);
+        }
 
         return view('backend.student-info.student.upload', compact('data'));
     }
 
-    public function downloadTemplate()
+    public function downloadTemplate(Request $request)
     {
-        return Excel::download(new \App\Exports\StudentTemplateExport(), 'student_upload_format.xlsx');
+        $format = (string) $request->query('format', '1');
+        if ($format === '2') {
+            return Excel::download(new \App\Exports\StudentQuickBooksTemplateExport(), 'quick_books_upload_template.xlsx');
+        }
+        if ($format === '3') {
+            return Excel::download(new \App\Exports\StudentCrdbTemplateExport(), 'crdb_upload_template.xlsx');
+        }
+        return Excel::download(new \App\Exports\StudentNormalTemplateExport(), 'normal_excel_upload_template.xlsx');
     }
 
     public function uploadOutstandingFees()
@@ -195,18 +218,16 @@ class StudentController extends Controller
         return back()->with('danger', $result['message'])->withInput();
     }
 
-    public function updatefees(){
-        $data['title']     = 'Update Fees';
-        $data['classes']   = $this->classRepo->assignedAll();
-        $data['sections']  = [];
-        $data['shifts']    = $this->shiftRepo->all();
+    /** Legacy URL: redirects browser to SPA `/students/update-fees`. JSON callers get minimal meta only. */
+    public function updatefees(Request $request): JsonResponse|RedirectResponse
+    {
+        if ($request->expectsJson()) {
+            return response()->json([
+                'meta' => ['title' => 'Update Fees'],
+            ]);
+        }
 
-        $data['bloods']       = $this->bloodRepo->all();
-        $data['religions']    = $this->religionRepo->all();
-        $data['genders']      = $this->genderRepo->all();
-        $data['categories']   = $this->categoryRepo->all();
-
-        return view('backend.student-info.student.updatefees', compact('data'));
+        return redirect()->to(spa_url('students/update-fees'));
     }
 
     public function addNewDocument(Request $request)
@@ -260,9 +281,27 @@ class StudentController extends Controller
         $result = $this->repo->upload($request);
 
         if($result['status']){
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => $result['message'] ?? 'Upload completed successfully.',
+                    'pending_transport' => $result['pending_transport'] ?? [],
+                ]);
+            }
             return redirect()->route('student.index')->with('success', $result['message']);
         }
+        if ($request->expectsJson()) {
+            return response()->json(['message' => $result['message'] ?? 'Upload failed.'], 422);
+        }
         return back()->with('danger', $result['message']);
+    }
+
+    public function assignTransportFeesFromUpload(Request $request): JsonResponse
+    {
+        $result = $this->repo->assignTransportFeesFromUpload($request);
+        if ($result['status']) {
+            return response()->json(['message' => $result['message'] ?? 'Transport fees assigned.']);
+        }
+        return response()->json(['message' => $result['message'] ?? 'Failed to assign transport fees.'], 422);
     }
 
     public function updateStudentFees(Request $request){
@@ -273,6 +312,12 @@ class StudentController extends Controller
         ]);
     
         if ($validator->fails()) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => $validator->errors()->first() ?: 'Validation failed.',
+                    'errors' => $validator->errors(),
+                ], 422);
+            }
             return redirect()->back()
                              ->withErrors($validator)
                              ->withInput()
@@ -280,9 +325,21 @@ class StudentController extends Controller
         }
         $result = $this->repo->updateStudentFees($request);
 
-        if($result['status']){
+        if ($result['status']) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => $result['message'] ?? 'Fees spreadsheet processed successfully.',
+                ]);
+            }
+
             return redirect()->route('fees-collect.index')->with('success', $result['message']);
         }
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => $result['message'] ?? 'Update failed.',
+            ], 422);
+        }
+
         return back()->with('danger', $result['message']);
     }
 
@@ -332,7 +389,7 @@ class StudentController extends Controller
             return response()->json(['data' => $data]);
         }
 
-        return redirect()->to(url('/app/students/'.$id));
+        return redirect()->to(spa_url('students/'.$id));
     }
 
     public function qrCode($id)

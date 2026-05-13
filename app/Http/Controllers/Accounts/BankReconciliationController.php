@@ -422,10 +422,10 @@ class BankReconciliationController extends Controller
 
         if (!is_array($transactions) || empty($transactions)) {
             if ($request->expectsJson()) {
-                return response()->json(['message' => __('No transactions to process. Please upload a PDF file.')], 422);
+                return response()->json(['message' => __('No transactions to process. Please upload an Excel file.')], 422);
             }
             return redirect()->route('accounting.bank-reconciliation.index')
-                ->with('error', __('No transactions to process. Please upload a PDF file.'));
+                ->with('error', __('No transactions to process. Please upload an Excel file.'));
         }
 
         $data = [
@@ -964,9 +964,15 @@ class BankReconciliationController extends Controller
     /**
      * Clear session data
      */
-    public function reset()
+    public function reset(Request $request): JsonResponse|RedirectResponse
     {
         session()->forget('bank_transactions');
+        session()->forget('bank_transactions_excel');
+
+        if ($request->expectsJson()) {
+            return response()->json(['message' => __('Session cleared. Ready for new upload.')]);
+        }
+
         return redirect()->route('accounting.bank-reconciliation.index')
             ->with('success', __('Session cleared. Ready for new upload.'));
     }

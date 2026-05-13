@@ -39,7 +39,7 @@ class ReligionController extends Controller
                 'meta' => ['title' => $data['title']],
             ]);
         }
-        return redirect()->to(spa_url('religions'));
+        return redirect()->to(spa_url('settings/religions'));
     }
 
     public function create(Request $request): JsonResponse|RedirectResponse
@@ -48,7 +48,7 @@ class ReligionController extends Controller
         if ($request->expectsJson()) {
             return response()->json(['meta' => $data]);
         }
-        return redirect()->to(spa_url('religions/create'));
+        return redirect()->to(spa_url('settings/religions/create'));
     }
 
     public function store(ReligionStoreRequest $request): JsonResponse|RedirectResponse
@@ -73,7 +73,7 @@ class ReligionController extends Controller
         if ($request->expectsJson()) {
             return response()->json(['data' => $data, 'meta' => ['title' => $data['title']]]);
         }
-        return redirect()->to(spa_url('religions/'.$id.'/edit'));
+        return redirect()->to(spa_url('settings/religions/'.$id.'/edit'));
     }
 
     public function translate(Request $request, $id): JsonResponse|RedirectResponse
@@ -85,7 +85,7 @@ class ReligionController extends Controller
         if ($request->expectsJson()) {
             return response()->json(['data' => $data, 'meta' => ['title' => $data['title']]]);
         }
-        return redirect()->to(spa_url('religions/'.$id.'/translate'));
+        return redirect()->to(spa_url('settings/religions/'.$id.'/translate'));
     }
 
     public function translateUpdate(Request $request, $id): JsonResponse|RedirectResponse{

@@ -35,7 +35,7 @@ export function FeesCollectionEditPage({ Layout }) {
         setSaving(true);
         try {
             await axios.put(`/fees-collect/update/${id}`, form, { headers: xhrJson });
-            nav('/fees/collections');
+            nav('/collections');
         } catch (ex) {
             setErr(ex.response?.data?.message || 'Update failed.');
         } finally {
@@ -55,7 +55,7 @@ export function FeesCollectionEditPage({ Layout }) {
                     <input type="number" className="rounded-lg border border-gray-200 px-3 py-2 text-sm" placeholder="Paid Amount" value={form.paid_amount || ''} onChange={(e) => setForm({ ...form, paid_amount: e.target.value })} />
                     <input type="number" className="rounded-lg border border-gray-200 px-3 py-2 text-sm" placeholder="Remained Amount" value={form.remained_amount || ''} onChange={(e) => setForm({ ...form, remained_amount: e.target.value })} />
                     <div className="md:col-span-2 flex justify-end gap-2 border-t border-gray-100 pt-3">
-                        <Link to="/fees/collections" className="rounded-lg border border-gray-200 px-3.5 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50">Cancel</Link>
+                        <Link to="/collections" className="rounded-lg border border-gray-200 px-3.5 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50">Cancel</Link>
                         <button disabled={saving} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-60">{saving ? 'Saving...' : 'Update'}</button>
                     </div>
                 </form> : null}

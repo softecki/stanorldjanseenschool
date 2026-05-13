@@ -26,6 +26,12 @@ class FeesCollectionRequest extends FormRequest
         return [
             'class'        => 'required',
             'section'      => 'required',
+            'balance_status' => 'nullable',
+            'fee_group_id' => 'nullable',
+            'dates' => 'nullable|string',
+            'date_from' => 'nullable|date',
+            'date_to' => 'nullable|date',
+            'payment_percentage' => 'nullable|in:10,20,30,40,50,60,70,80,90,100',
         ];
     }
 }

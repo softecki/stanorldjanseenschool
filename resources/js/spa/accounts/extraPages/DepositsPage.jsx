@@ -1,8 +1,17 @@
 import React from 'react';
-import { AccountListPage } from '../AccountExtraShared';
+import { ExpenseRecordsPage } from '../pages/ExpenseRecordsPage';
 
 export function DepositsPage({ Layout }) {
     return (
-        <AccountListPage Layout={Layout} title="Deposits" endpoint="/deposit" createTo="/accounts/deposits/create" editBase="/accounts/deposits" />
+        <ExpenseRecordsPage
+            Layout={Layout}
+            title="Deposits"
+            subtitle="Deposit records with bank accounts, references, and actions."
+            endpoint="/deposit"
+            createTo="/deposits/create"
+            editBase="/deposits"
+            deleteBase="/deposit/delete"
+            createLabel="Create deposit"
+        />
     );
 }

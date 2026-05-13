@@ -229,7 +229,7 @@
                                             <!--School about Start -->
                                             <div class="col-12">
                                                 <label for="inputname" class="form-label">{{ ___('settings.school_about') }} <span class="fillable">*</span></label>
-                                                <textarea name="school_about" class="m-0 form-control ot-input @error('school_about') is-invalid @enderror" cols="30" rows="10">{{ Setting('school_about') }}"</textarea>
+                                                <textarea name="school_about" class="m-0 form-control ot-input @error('school_about') is-invalid @enderror" cols="30" rows="10">{{ Setting('school_about') }}</textarea>
                                                 @error('school_about')
                                                     <div id="validationServer04Feedback" class="invalid-feedback">
                                                         {{ $message }}

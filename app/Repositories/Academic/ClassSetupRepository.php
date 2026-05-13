@@ -23,8 +23,11 @@ class ClassSetupRepository implements ClassSetupInterface
 
     public function getSections($id) // class id
     {
-        // Use session_id = 9 for 2026 instead of setting('session') which returns 8
-        $result = $this->model->active()->where('classes_id', $id)->where('session_id', 9)->first();
+        $sessionId = setting('session');
+        if ($sessionId === null || $sessionId === '') {
+            return collect();
+        }
+        $result = $this->model->active()->where('classes_id', $id)->where('session_id', $sessionId)->first();
         return ClassSetupChildren::with('section')->where('class_setup_id', @$result->id)->whereHas('section')->select('section_id')->get();
     }
     public function promoteClasses($id) // session id

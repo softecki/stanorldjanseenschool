@@ -33,6 +33,7 @@ use App\Http\Controllers\Settings\NotificaticaSettingController;
 use App\Http\Controllers\StorekeeperController;
 use App\Http\Controllers\OrderController;
 use App\Mail\DailyReportMail;
+use App\Support\PublicSiteMeta;
 use Illuminate\Support\Facades\Mail;
 
 /*
@@ -103,21 +104,33 @@ Route::middleware(saasMiddleware())->group(function () {
                 //         return view('welcome');
                 //     });
                 // } else {
-                     Route::get('/','loginPage')->name('login');
-                // }
+                // Public home is served by routes/frontend.php (SPA); login stays at /login.
 
-                Route::get('login',                        'loginPage')->name('login');
+                Route::get('login', function () {
+                    return view('spa.app');
+                })->name('login');
                 // Route::get('login',                        'loginPage')->name('login.page');
                 Route::post('login',                       'login')->name('login.auth');
-                Route::get('register',                     'registerPage')->name('register.page');
+                Route::get('register', function () {
+                    return view('spa.app');
+                })->name('register.page');
                 Route::post('register',                    'register')->name('register');
-                Route::get('verify-email/{email}/{token}', 'verifyEmail')->name('verify-email');
+                Route::get('verify-email/{email}/{token}', function (Illuminate\Http\Request $request, $email, $token) {
+                    if ($request->expectsJson()) {
+                        return app(AuthenticationController::class)->verifyEmail($request, $email, $token);
+                    }
+                    return view('spa.app');
+                })->name('verify-email');
 
                 // reset password
-                Route::get('forgot-password',               'forgotPasswordPage')->name('forgot-password');
+                Route::get('forgot-password', function () {
+                    return view('spa.app');
+                })->name('forgot-password');
                 Route::post('forgot-password',              'forgotPassword')->name('forgot.password');
 
-                Route::get('reset-password/{email}/{token}', 'resetPasswordPage')->name('reset-password');
+                Route::get('reset-password/{email}/{token}', function () {
+                    return view('spa.app');
+                })->name('reset-password');
                 Route::post('reset-password',                'resetPassword')->name('reset.password');
             });
         });
@@ -135,7 +148,7 @@ Route::middleware(saasMiddleware())->group(function () {
 
             //landing page
             Route::get('/landing', function () {
-                return view('frontend-landing.school_landing');
+                return view('spa.app');
             });
 
 
@@ -156,7 +169,10 @@ Route::middleware(saasMiddleware())->group(function () {
                     Route::get('dashboard',                    [DashboardController::class, 'index'])->name('dashboard');
                     // SPA direct-refresh support for all client-side routes.
                     Route::get('{spaPath}', [DashboardController::class, 'index'])
-                        ->where('spaPath', '^(students|categories|parents|disabled|promote|deleted-history|reports|accounts|academic|classes|sections|subjects|shifts|class-rooms|class-setups|subject-assigns|time-schedules|class-routines|exam-routines|fees|communication|staff|settings)(/.*)?$')
+                        ->where(
+                            'spaPath',
+                            '^(students|qr_code|categories|parents|disabled|promote|deleted-history|reports|accounts|accounting|chart-of-accounts|payment-methods|account-heads|income|expense|deposits|payments|account-transactions|suppliers|invoices|cash|product|item|academic|classes|sections|subjects|shifts|class-rooms|class-setups|subject-assigns|time-schedules|class-routines|exam-routines|fees|collections|assignments|types|groups|masters|transactions|online-transactions|amendments|communication|staff|settings|about|news|news-detail|events|event-detail|notices|notice-detail|contact|result|online-admission|online-admission-fees|landing|policy|page|get-classes|get-sections|get-exam-type)(/.*)?$'
+                        )
                         ->name('spa.fallback');
                     Route::get('dashboardUpdate/{term}', [DashboardController::class, 'getTermSummary']);
                     Route::get('fees-collection-monthly',      [DashboardController::class, 'feesCollectionMonthly']);
@@ -392,8 +408,14 @@ Route::get('/export-students', [StudentController::class, 'exportStudents']);
 
 Route::get('/export-exams', [StudentController::class, 'exportExams']);
 
-Route::get('/policy', function () {
-    return view('frontend.policy');
+Route::get('/policy', function (Illuminate\Http\Request $request) {
+    if ($request->expectsJson()) {
+        return response()->json([
+            'meta' => PublicSiteMeta::page('Privacy Policy'),
+            'data' => ['html' => view('frontend.policy')->render()],
+        ]);
+    }
+    return view('spa.app');
 });
 
 Route::middleware(saasMiddleware())->group(function () {

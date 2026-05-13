@@ -19,6 +19,7 @@ use App\Repositories\StudentInfo\StudentRepository;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\DB;
 
 class FeesAssignController extends Controller
 {
@@ -111,11 +112,12 @@ class FeesAssignController extends Controller
         $data['title']        = ___('fees.fees_assign');
         $data['fees_assign']  = $this->repo->show($id);
 
-        if (!$data['fees_assign']) {
+        if (! $data['fees_assign']) {
             if ($request->expectsJson()) {
-                return response()->json(['message' => 'Fees assignment not found.'], 404);
+                return response()->json(['message' => ___('alert.no_data_found')], 404);
             }
-            return redirect()->route('fees-assign.index')->with('danger', 'Fees assignment not found.');
+
+            return redirect()->route('fees-assign.index')->with('danger', ___('alert.no_data_found'));
         }
 
         $data['classes']      = $this->classRepo->assignedAll();
@@ -125,13 +127,25 @@ class FeesAssignController extends Controller
         })->values();
         $data['fees_groups']  = $this->feesMasterRepo->allGroups();
 
-        $data['assigned_fes_masters'] = [];
-        if ($data['fees_assign']->feesAssignChilds) {
-            $data['assigned_fes_masters'] = $data['fees_assign']->feesAssignChilds
-                ->pluck('fees_master_id')
-                ->unique()
-                ->values()
-                ->toArray();
+        $data['assigned_fes_masters'] = DB::table('fees_assign_childrens')
+            ->where('fees_assign_id', $id)
+            ->pluck('fees_master_id')
+            ->unique()
+            ->map(fn ($v) => (int) $v)
+            ->values()
+            ->all();
+
+        /** @var array<string, int[]> Map fees_master_id → student ids (only rows on this assignment id) */
+        $data['assigned_students_by_master'] = [];
+        foreach (DB::table('fees_assign_childrens')->where('fees_assign_id', $id)->select('fees_master_id', 'student_id')->get() as $r) {
+            $mk = (string) $r->fees_master_id;
+            if (! isset($data['assigned_students_by_master'][$mk])) {
+                $data['assigned_students_by_master'][$mk] = [];
+            }
+            $data['assigned_students_by_master'][$mk][] = (int) $r->student_id;
+        }
+        foreach ($data['assigned_students_by_master'] as $k => $ids) {
+            $data['assigned_students_by_master'][$k] = array_values(array_unique($ids));
         }
 
         $data['fees_masters'] = collect();
@@ -147,7 +161,9 @@ class FeesAssignController extends Controller
                     'classes' => $data['classes'],
                     'fees_groups' => $data['fees_groups'],
                     'categories' => $this->categoryRepo->all(),
+                    'genders' => $this->genderRepo->all(),
                     'assigned_fes_masters' => $data['assigned_fes_masters'],
+                    'assigned_students_by_master' => $data['assigned_students_by_master'],
                     'fees_masters' => $data['fees_masters'],
                 ],
             ]);

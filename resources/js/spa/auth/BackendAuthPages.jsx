@@ -7,3 +7,4 @@ export { default as BackendLoginPage } from './pages/LoginPage';
 export { default as BackendRegisterPage } from './pages/RegisterPage';
 export { default as BackendForgotPasswordPage } from './pages/ForgotPasswordPage';
 export { default as BackendResetPasswordPage } from './pages/ResetPasswordPage';
+export { default as BackendVerifyEmailPage } from './pages/VerifyEmailPage';

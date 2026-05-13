@@ -17,6 +17,16 @@ export function AcademicFormPage({ Layout, titleCreate, titleEdit, loadEndpoint,
     const [saving, setSaving] = useState(false);
     const isClassSetup = loadEndpoint === '/class-setup';
     const isSubjectAssign = loadEndpoint === '/assign-subject';
+    const isClassOrSection = loadEndpoint === '/classes' || loadEndpoint === '/section';
+
+    const normalizeStatusForForm = (s) => {
+        if (s == null || s === '') return '1';
+        const n = Number(s);
+        if (n === 2) return '0';
+        if (n === 0) return '0';
+        if (n === 1) return '1';
+        return String(s);
+    };
 
     useEffect(() => {
         const url = edit ? `${loadEndpoint}/edit/${id}` : `${loadEndpoint}/create`;
@@ -26,7 +36,14 @@ export function AcademicFormPage({ Layout, titleCreate, titleEdit, loadEndpoint,
                 const m = r.data?.meta || {};
                 setMeta(m);
                 if (edit) {
-                    setForm((prev) => ({ ...prev, ...(r.data?.data || {}) }));
+                    const d = r.data?.data || {};
+                    setForm((prev) => {
+                        const next = { ...prev, ...d, name: d.name ?? d.title ?? prev.name ?? '' };
+                        return {
+                            ...next,
+                            status: normalizeStatusForForm(next.status),
+                        };
+                    });
                     if (isClassSetup) setSectionIds(m.class_setup_sections || []);
                 }
             })
@@ -60,6 +77,13 @@ export function AcademicFormPage({ Layout, titleCreate, titleEdit, loadEndpoint,
         setSaving(true);
         try {
             const payload = { ...form };
+            if (isClassOrSection) {
+                delete payload.code;
+                delete payload.type;
+                payload.name = String(form.name || form.title || '').trim();
+                const s = Number(form.status);
+                payload.status = s === 2 ? 0 : s === 0 || s === 1 ? s : 1;
+            }
             if (isClassSetup) payload.sections = sectionIds;
             if (isSubjectAssign) {
                 payload.subjects = subjectRows.map((r) => r.subject).filter(Boolean);
@@ -81,10 +105,12 @@ export function AcademicFormPage({ Layout, titleCreate, titleEdit, loadEndpoint,
             {loading ? <FullPageLoader text="Loading form..." /> : null}
             {!loading ? <form onSubmit={submit} className="grid gap-3 rounded-xl border border-gray-200 bg-white p-5 shadow-sm md:grid-cols-2">
                 <input className="rounded-lg border border-gray-200 px-3 py-2 text-sm md:col-span-2" placeholder="Name" value={form.name || form.title || ''} onChange={(e) => setForm({ ...form, name: e.target.value, title: e.target.value })} />
-                <input className="rounded-lg border border-gray-200 px-3 py-2 text-sm" placeholder="Code" value={form.code || ''} onChange={(e) => setForm({ ...form, code: e.target.value })} />
+                {isClassOrSection ? null : (
+                    <input className="rounded-lg border border-gray-200 px-3 py-2 text-sm" placeholder="Code" value={form.code || ''} onChange={(e) => setForm({ ...form, code: e.target.value })} />
+                )}
                 <select className="rounded-lg border border-gray-200 px-3 py-2 text-sm" value={String(form.status ?? '1')} onChange={(e) => setForm({ ...form, status: e.target.value })}>
                     <option value="1">Active</option>
-                    <option value="2">Inactive</option>
+                    <option value="0">Inactive</option>
                 </select>
                 {(meta.classes || []).length ? (
                     <select className="rounded-lg border border-gray-200 px-3 py-2 text-sm" value={form.classes || form.class || ''} onChange={(e) => setForm({ ...form, classes: e.target.value, class: e.target.value })}>

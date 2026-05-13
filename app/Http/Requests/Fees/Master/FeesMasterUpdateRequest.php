@@ -7,52 +7,38 @@ use Illuminate\Foundation\Http\FormRequest;
 
 class FeesMasterUpdateRequest extends FormRequest
 {
-    /**
-     * Determine if the user is authorized to make this request.
-     *
-     * @return bool
-     */
-    public function authorize()
+    public function authorize(): bool
     {
         return true;
     }
 
     /**
-     * Get the validation rules that apply to the request.
-     *
      * @return array<string, mixed>
      */
-    public function rules()
+    public function rules(): array
     {
-        if(Request()->fine_type == FineType::NONE){
-            return [
-                'fees_type_id'      => 'required|max:25',
-                'fees_group_id'     => 'required|max:25',
-                'due_date'          => 'required|max:25',
-                'amount'            => 'required|max:10',
-                'fine_type'         => 'required|max:10',
-            ];
+        $fine = (int) $this->input('fine_type', FineType::NONE);
+
+        $rules = [
+            'fees_group_id' => 'required|integer|exists:fees_groups,id',
+            'fees_type_id'  => 'required|integer|exists:fees_types,id',
+            'due_date'      => 'required|date',
+            'amount'        => 'required|numeric|min:0',
+            'fine_type'     => 'required|integer|in:0,1,2',
+            'status'        => 'required|in:0,1,2',
+        ];
+
+        if ($fine === FineType::PERCENTAGE) {
+            $rules['percentage'] = 'required|integer|min:0|max:100';
+            $rules['fine_amount'] = 'nullable|numeric|min:0';
+        } elseif ($fine === FineType::FIX_AMOUNT) {
+            $rules['fine_amount'] = 'required|numeric|min:0';
+            $rules['percentage'] = 'nullable|integer|min:0|max:100';
+        } else {
+            $rules['percentage'] = 'nullable|integer|min:0|max:100';
+            $rules['fine_amount'] = 'nullable|numeric|min:0';
         }
-        elseif(Request()->fine_type == FineType::PERCENTAGE){
-            return [
-                'fees_type_id'      => 'required|max:25',
-                'fees_group_id'     => 'required|max:25',
-                'due_date'          => 'required|max:25',
-                'amount'            => 'required|max:10',
-                'fine_type'         => 'required|max:10',
-                'percentage'        => 'required|max:10',
-                'fine_amount'       => 'required|max:10'
-            ];
-        }
-        elseif(Request()->fine_type == FineType::FIX_AMOUNT){
-            return [
-                'fees_type_id'      => 'required|max:25',
-                'fees_group_id'     => 'required|max:25',
-                'due_date'          => 'required|max:25',
-                'amount'            => 'required|max:10',
-                'fine_type'         => 'required|max:10',
-                'fine_amount'       => 'required|max:10'
-            ];
-        }
+
+        return $rules;
     }
 }

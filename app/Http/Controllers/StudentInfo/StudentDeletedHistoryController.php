@@ -38,6 +38,6 @@ class StudentDeletedHistoryController extends Controller
             ]);
         }
 
-        return redirect()->to(url('/app/students/deleted-history/'.$id));
+        return redirect()->to(spa_url('deleted-history/'.$id));
     }
 }

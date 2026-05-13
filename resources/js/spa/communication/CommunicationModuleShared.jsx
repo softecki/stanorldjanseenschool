@@ -18,3 +18,25 @@ export function paginateRows(r) {
     return [];
 }
 
+/** Laravel paginator JSON: `{ data: { data: [...], current_page, last_page, total } }` */
+export function paginateState(r) {
+    const p = r.data?.data;
+    if (!p || typeof p !== 'object') {
+        return { rows: [], page: 1, lastPage: 1, total: 0, from: null, to: null };
+    }
+    if (Array.isArray(p.data)) {
+        return {
+            rows: p.data,
+            page: p.current_page ?? 1,
+            lastPage: p.last_page ?? 1,
+            total: p.total ?? p.data.length,
+            from: p.from ?? null,
+            to: p.to ?? null,
+        };
+    }
+    if (Array.isArray(p)) {
+        return { rows: p, page: 1, lastPage: 1, total: p.length, from: p.length ? 1 : null, to: p.length };
+    }
+    return { rows: [], page: 1, lastPage: 1, total: 0, from: null, to: null };
+}
+

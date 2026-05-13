@@ -33,6 +33,38 @@ export function normalizeRows(payload) {
     return [];
 }
 
+/** Index endpoints that return Laravel `paginate()` (items in `data.data`, meta at top). */
+export function normalizePagedList(payload) {
+    const paged = payload?.data;
+    if (paged && Array.isArray(paged.data)) {
+        return {
+            rows: paged.data,
+            meta: payload?.meta || {},
+            pagination: {
+                current_page: paged.current_page ?? 1,
+                last_page: paged.last_page ?? 1,
+                per_page: paged.per_page ?? 15,
+                total: paged.total ?? paged.data.length,
+            },
+        };
+    }
+    // `{ data: [ ...rows ], meta }` without Laravel paginator wrapper
+    if (Array.isArray(paged)) {
+        const n = paged.length;
+        return {
+            rows: paged,
+            meta: payload?.meta || {},
+            pagination: { current_page: 1, last_page: 1, per_page: Math.max(n, 1), total: n },
+        };
+    }
+    const rows = normalizeRows(payload);
+    return {
+        rows,
+        meta: payload?.meta || {},
+        pagination: { current_page: 1, last_page: 1, per_page: 15, total: rows.length },
+    };
+}
+
 export function optionFrom(item) {
     return {
         id: item?.id ?? item?.class?.id ?? item?.section?.id ?? item?.subject?.id ?? item?.teacher?.id ?? '',

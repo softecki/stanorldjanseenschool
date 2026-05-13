@@ -12,7 +12,6 @@ use App\Http\Requests\User\UserUpdateRequest;
 use App\Interfaces\GenderInterface;
 use App\Interfaces\Staff\DepartmentInterface;
 use App\Interfaces\Staff\DesignationInterface;
-use Symfony\Component\HttpFoundation\Response;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -178,18 +177,35 @@ class UserController extends Controller
         return redirect()->route('users.index')->with('danger',  ___('alert.something_went_wrong_please_try_again'));
     }
 
-    public function delete($id)
+    public function delete(Request $request, $id)
     {
-        if ($this->user->destroy($id)) :
+        $ok = $this->user->destroy($id);
+
+        if ($request->expectsJson()) {
+            if ($ok) {
+                return response()->json([
+                    'success' => true,
+                    'message' => ___('alert.deleted_successfully'),
+                ]);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => ___('alert.something_went_wrong_please_try_again'),
+            ], 422);
+        }
+
+        if ($ok) {
             $success[0] = ___('alert.deleted_successfully');
-            $success[1] = "Success";
+            $success[1] = 'Success';
             $success[2] = ___('alert.deleted');
             $success[3] = ___('alert.OK');
-        else :
+        } else {
             $success[0] = ___('alert.something_went_wrong_please_try_again');
             $success[1] = 'error';
             $success[2] = ___('alert.oops');
-        endif;
+        }
+
         return response()->json($success);
     }
 
@@ -217,13 +233,13 @@ class UserController extends Controller
             $this->user->status($request);
         }
 
-        return response()->json(["message" => __("Status update successful")], Response::HTTP_OK);
+        return response()->json(["message" => __("Status update successful")], 200);
     }
 
     public function deletes(Request $request)
     {
         $this->user->deletes($request);
 
-        return response()->json(["message" => __('Delete successful.')], Response::HTTP_OK);
+        return response()->json(["message" => __('Delete successful.')], 200);
     }
 }

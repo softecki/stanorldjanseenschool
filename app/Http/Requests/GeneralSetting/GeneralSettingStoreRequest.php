@@ -24,12 +24,19 @@ class GeneralSettingStoreRequest extends FormRequest
     public function rules()
     {
         return [
-            'application_name' => 'required',
-            'footer_text' => 'required',
-            'light_logo' => 'image|mimes:jpg,png,jpeg,gif,svg|max:2048',
-            'dark_logo' => 'image|mimes:jpg,png,jpeg,gif,svg|max:2048',
-            'dark_logo' => 'image|mimes:jpg,png,jpeg,gif,svg|max:2048',
-            'favicon' => 'image|mimes:jpg,png,jpeg,gif,svg|max:2048',
+            'application_name' => 'required|string|max:255',
+            'footer_text' => 'required|string|max:500',
+            'address' => 'required|string|max:500',
+            'map_key' => 'required|string',
+            'phone' => 'required|string|max:50',
+            'email' => 'required|email|max:255',
+            'school_about' => 'required|string',
+            'default_langauge' => 'required|string|max:20',
+            'session' => 'required',
+            'currency_code' => 'required|string|max:10',
+            'light_logo' => 'nullable|image|mimes:jpg,png,jpeg,gif,svg|max:2048',
+            'dark_logo' => 'nullable|image|mimes:jpg,png,jpeg,gif,svg|max:2048',
+            'favicon' => 'nullable|image|mimes:jpg,png,jpeg,gif,svg|max:2048',
         ];
     }
 }

@@ -3,6 +3,6 @@ import { AccountListPage } from '../AccountExtraShared';
 
 export function SuppliersPage({ Layout }) {
     return (
-        <AccountListPage Layout={Layout} title="Suppliers" endpoint="/suppliers" createTo="/accounts/suppliers/create" editBase="/accounts/suppliers" />
+        <AccountListPage Layout={Layout} title="Suppliers" endpoint="/suppliers" createTo="/suppliers/create" editBase="/suppliers" />
     );
 }

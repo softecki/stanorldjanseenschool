@@ -43,6 +43,7 @@ Route::middleware(saasMiddleware())->group(function () {
                     Route::get('/upload-outstanding-fees',   'uploadOutstandingFees')->name('student.uploadOutstandingFeesView');
                     Route::post('/upload-outstanding-fees',  'uploadOutstandingFeesStore')->name('student.uploadOutstandingFees');
                     Route::post('/uploadStudent',          'uploadStudentsDetails')->name('student.uploadStudent');
+                    Route::post('/assign-transport-from-upload', 'assignTransportFeesFromUpload')->name('student.assignTransportFeesFromUpload');
                     Route::post('/updateStudentFees',          'updateStudentFees')->name('student.updateStudentFees');
                 });
 
@@ -59,6 +60,7 @@ Route::middleware(saasMiddleware())->group(function () {
                     Route::get('/',                 'index')->name('student_category.index')->middleware('PermissionCheck:student_category_read');
                     Route::get('/create',           'create')->name('student_category.create')->middleware('PermissionCheck:student_category_create');
                     Route::post('/store',           'store')->name('student_category.store')->middleware('PermissionCheck:student_category_create', 'DemoCheck');
+                    Route::get('show/{id}',         'show')->name('student_category.show')->middleware('PermissionCheck:student_category_read');
                     Route::get('edit/{id}',         'edit')->name('student_category.edit')->middleware('PermissionCheck:student_category_update');
                     Route::PUT('update/{id}',       'update')->name('student_category.update')->middleware('PermissionCheck:student_category_update', 'DemoCheck');
                     Route::delete('/delete/{id}',   'delete')->name('student_category.delete')->middleware('PermissionCheck:student_category_delete', 'DemoCheck');

@@ -19,8 +19,7 @@ class Section extends Model
     public function getSectionTranAttribute()
     {
         $translation = $this->defaultTranslate()->first();
-        return $translation->name ?? $this->name;
-
+        return $translation?->name ?? $this->name;
     }
 
     public function scopeActive($query)

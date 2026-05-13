@@ -59,7 +59,6 @@ class MeritListRepository implements MeritListInterface
                     })
                     ->join('subjects as sub', 'sub.id', '=', 'mr.subject_id')
                     ->where('er.classes_id', $request->class)
-                    // ->where('er.section_id', $request->section)
                     ->where('er.exam_type_id', $examTypeId)
                     // ->where('er.session_id', $sessionId)
                     ->select(
@@ -73,12 +72,17 @@ class MeritListRepository implements MeritListInterface
                         'er.grade_name',
                         'er.position'
                     )
+                    ->when(!empty($request->section) && (string) $request->section !== '0', function ($query) use ($request) {
+                        return $query->where('er.section_id', $request->section);
+                    })
                     ->get();
 
                 // Step 3: Group and format
                 $grouped = $results->groupBy('student_id');
 
-                $formatted = $grouped->map(function ($items, $studentId) use ($subjectList) {
+                $subjectCount = max(count($subjectList), 1);
+
+                $formatted = $grouped->map(function ($items, $studentId) use ($subjectList, $subjectCount) {
                     $student = $items->first();
                     $subjectMarks = [];
 
@@ -98,7 +102,7 @@ class MeritListRepository implements MeritListInterface
                         'name'         => $student->first_name . ' ' . $student->last_name,
                         'subjects'     => $orderedSubjects,
                         'total'        => $student->total_marks,
-                        'average'      => round($student->total_marks / count($subjectList), 1),
+                        'average'      => round($student->total_marks / $subjectCount, 1),
                         'grade'        => $student->grade_name,
                         'position'     => $student->position,
                     ];

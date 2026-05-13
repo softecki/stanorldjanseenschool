@@ -35,7 +35,7 @@ class IncomeController extends Controller
         if ($request->expectsJson()) {
             return response()->json(['data' => $data['income'], 'meta' => ['title' => $data['title']]]);
         }
-        return view('backend.accounts.income.index', compact('data'));
+        return redirect()->to(url('/app/income'));
     }
 
     public function create(Request $request): JsonResponse|RedirectResponse
@@ -46,7 +46,7 @@ class IncomeController extends Controller
         if ($request->expectsJson()) {
             return response()->json(['meta' => $data]);
         }
-        return redirect()->to(url('/app/accounts/income/create'));
+        return redirect()->to(url('/app/income/create'));
     }
 
     public function store(IncomeStoreRequest $request): JsonResponse|RedirectResponse
@@ -73,7 +73,7 @@ class IncomeController extends Controller
         if ($request->expectsJson()) {
             return response()->json(['data' => $data['income'], 'meta' => $data]);
         }
-        return redirect()->to(url('/app/accounts/income/'.$id.'/edit'));
+        return redirect()->to(url('/app/income/'.$id.'/edit'));
     }
 
     public function update(IncomeUpdateRequest $request, $id): JsonResponse|RedirectResponse

@@ -7,19 +7,25 @@ use App\Models\Fees\FeesMaster;
 use App\Traits\ReturnFormatTrait;
 use Illuminate\Support\Facades\DB;
 use App\Models\Fees\FeesAssignChildren;
+use App\Models\Fees\FeesMasterQuarter;
 use App\Interfaces\Fees\FeesAssignInterface;
 use App\Models\StudentInfo\SessionClassStudent;
+use App\Repositories\StudentInfo\StudentRepository;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class FeesAssignRepository implements FeesAssignInterface
 {
     use ReturnFormatTrait;
 
-    private $model;
+    private FeesAssign $model;
 
-    public function __construct(FeesAssign $model)
+    private StudentRepository $students;
+
+    public function __construct(FeesAssign $model, StudentRepository $students)
     {
         $this->model = $model;
+        $this->students = $students;
     }
 
     public function all()
@@ -29,7 +35,34 @@ class FeesAssignRepository implements FeesAssignInterface
 
     public function getPaginateAll()
     {
-        return $this->model::latest()->where('session_id', setting('session'))->paginate(10);
+        return $this->model::query()
+            ->withCount('feesAssignChilds')
+            ->with(['group:id,name', 'class:id,name', 'section:id,name', 'session:id,name', 'category:id,name'])
+            ->latest()
+            ->where('session_id', setting('session'))
+            ->paginate(10);
+    }
+
+    public function show($id)
+    {
+        return $this->model
+            ->withCount('feesAssignChilds')
+            ->with([
+                'group:id,name',
+                'class:id,name',
+                'section:id,name',
+                'session:id,name',
+                'category:id,name',
+                'gender:id,name',
+                'feesAssignChilds' => function ($q) {
+                    $q->with(['student:id,first_name,last_name,admission_no,control_number', 'feesMaster' => function ($m) {
+                        $m->select('id', 'fees_type_id', 'fees_group_id', 'amount', 'due_date')->with(['type:id,name']);
+                    }])
+                        /** Full list needed for SPA view/edit grouping by fee type (was capped at 80). */
+                        ->orderBy('id');
+                },
+            ])
+            ->find($id);
     }
 
     public function store($request)
@@ -66,12 +99,18 @@ class FeesAssignRepository implements FeesAssignInterface
                 $row->classes_id      = $request->class;
                 $row->section_id    = "1";
                 $row->fees_group_id = $request->fees_group;
+                $row->category_id   = $request->student_category == null || $request->student_category === '' ? null : $request->student_category;
+                $row->gender_id     = $request->gender == null || $request->gender === '' ? null : $request->gender;
                 $row->save();
                 $feeAssignId = $row->id;
                 Log::info('FeesAssignRepository::store - New fees assign created', ['fees_assign_id' => $feeAssignId]);
             } else {
                 $feeAssignId = $feeAssignIdResult[0]->id;
                 Log::info('FeesAssignRepository::store - Using existing fees assign', ['fees_assign_id' => $feeAssignId]);
+                $this->model->whereKey($feeAssignId)->update([
+                    'category_id' => $request->student_category == null || $request->student_category === '' ? null : $request->student_category,
+                    'gender_id'   => $request->gender == null || $request->gender === '' ? null : $request->gender,
+                ]);
             }
 
 
@@ -119,180 +158,36 @@ class FeesAssignRepository implements FeesAssignInterface
                 $totalProcessed = 0;
                 $totalSkipped = 0;
                 $totalErrors = 0;
-                
-                foreach ($request->fees_master_ids as $fees_master) {
-                    Log::info('FeesAssignRepository::store - Processing fees master', ['fees_master_id' => $fees_master]);
-                    
-                    foreach ($request->student_ids as $student_id) {
-                        $feeTypeId = 0; // Default feeTypeId to 0
-                
-                        if ($request->fees_group == "3") {
-                            Log::info('FeesAssignRepository::store - Processing transport fees for student', [
-                                'student_id' => $student_id,
-                                'fees_group' => '3 (Transport)',
-                            ]);
-                            
-                            // Fetch transport profile for the student
-                            $transportProfile = DB::select("
-                                SELECT student_categories.name 
-                                FROM student_categories
-                                INNER JOIN students ON students.student_category_id = student_categories.id
-                                WHERE students.id = ?
-                            ", [$student_id]);
-                            
-                            if(!empty($transportProfile)){
-                                $transportProfile =$transportProfile[0]->name;
-                                Log::info('FeesAssignRepository::store - Transport profile found', [
-                                    'student_id' => $student_id,
-                                    'transport_profile' => $transportProfile,
-                                ]);
-                                
-                            // Split transport profile based on 'DAY'
-                            $transportProfileParts = explode('DAY', $transportProfile);
-                
-                            if (!empty($transportProfileParts[1])) {
-                                // Get fee type ID based on transport profile part
-                                $feeTypeResult = DB::select("
-                                    SELECT id 
-                                    FROM fees_types 
-                                    WHERE code = ?
-                                ", [trim($transportProfileParts[1])]);
-                                
-                                if (!empty($feeTypeResult)) {
-                                    $feeTypeId = $feeTypeResult[0]->id;
-                                    Log::info('FeesAssignRepository::store - Fee type ID found for transport', [
-                                        'student_id' => $student_id,
-                                        'fee_type_id' => $feeTypeId,
-                                        'route_code' => trim($transportProfileParts[1]),
-                                    ]);
-                
-                                    // Get fees master ID based on fee type ID
-                                    $feesMasterResult = DB::select("
-                                        SELECT id 
-                                        FROM fees_masters 
-                                        WHERE fees_type_id = ?
-                                    ", [$feeTypeId]);
-                                    
-                                    if (!empty($feesMasterResult)) {
-                                        $fees_master = $feesMasterResult[0]->id;
-                                        Log::info('FeesAssignRepository::store - Fees master ID found for transport', [
-                                            'student_id' => $student_id,
-                                            'fees_master_id' => $fees_master,
-                                        ]);
-                                    } else {
-                                        Log::warning('FeesAssignRepository::store - No fees master found for transport fee type', [
-                                            'student_id' => $student_id,
-                                            'fee_type_id' => $feeTypeId,
-                                        ]);
-                                    }
-                                } else {
-                                    Log::warning('FeesAssignRepository::store - No fee type found for transport route', [
-                                        'student_id' => $student_id,
-                                        'route_code' => trim($transportProfileParts[1]),
-                                    ]);
-                                }
-                            } else {
-                                Log::warning('FeesAssignRepository::store - Transport profile missing route code', [
-                                    'student_id' => $student_id,
-                                    'transport_profile' => $transportProfile,
-                                ]);
-                            }
-                        } else {
-                            Log::warning('FeesAssignRepository::store - No transport profile found for student', [
-                                'student_id' => $student_id,
-                            ]);
-                        }
-                        }else{
-                            $feeTypeId = "1";
-                            Log::info('FeesAssignRepository::store - Using default fee type for non-transport fees', [
-                                'student_id' => $student_id,
-                                'fee_type_id' => $feeTypeId,
-                                'fees_master_id' => $fees_master,
-                            ]);
-                        }
-                
-                        // Proceed only if feeTypeId is not 0
-                        if ($feeTypeId != 0) {
-                            // Check if a fee assignment already exists
-                            $feeAssignChildren = DB::select('
-                                SELECT id 
-                                FROM fees_assign_childrens 
-                                WHERE fees_assign_id = ? AND fees_master_id = ? AND student_id = ?
-                            ', [$feeAssignId, $fees_master, $student_id]);
-                
-                            if (empty($feeAssignChildren)) {
-                                // Ensure student has a control number
-                                $controlNumber = $this->getStudentControlNumber($student_id);
-                                if (!empty($controlNumber)) {
-                                    $feesAmount = $this->getFeesAmount($fees_master);
-                                    $dueDate = $this->getDueDate($fees_master);
-                                    
-                                    Log::info('FeesAssignRepository::store - Creating fees assign child', [
-                                        'student_id' => $student_id,
-                                        'fees_assign_id' => $feeAssignId,
-                                        'fees_master_id' => $fees_master,
-                                        'fees_amount' => $feesAmount,
-                                        'control_number' => $controlNumber,
-                                        'due_date_month' => $dueDate,
-                                    ]);
-                                    
-                                    $feesChild = new FeesAssignChildren();
-                                    $feesChild->fees_assign_id = $feeAssignId;
-                                    $feesChild->fees_master_id = $fees_master;
-                                    $feesChild->student_id = $student_id;
-                                    $feesChild->fees_amount = $feesAmount;
-                                    $feesChild->remained_amount = $feesAmount;
-                                    $feesChild->control_number = $controlNumber;
-                
-                                    // Divide fees into quarters if due date allows
-                                    if ($dueDate > 8) {
-                                        $quarterAmount = $feesAmount / 4;
-                                        $feesChild->quater_one = $quarterAmount;
-                                        $feesChild->quater_two = $quarterAmount;
-                                        $feesChild->quater_three = $quarterAmount;
-                                        $feesChild->quater_four = $quarterAmount;
-                                        
-                                        Log::info('FeesAssignRepository::store - Quarters assigned', [
-                                            'student_id' => $student_id,
-                                            'quarter_amount' => $quarterAmount,
-                                        ]);
-                                    } else {
-                                        Log::info('FeesAssignRepository::store - Quarters not assigned (due date <= 8)', [
-                                            'student_id' => $student_id,
-                                            'due_date_month' => $dueDate,
-                                        ]);
-                                    }
-                
-                                    $feesChild->save();
-                                    $totalProcessed++;
-                                    
-                                    Log::info('FeesAssignRepository::store - Fees assign child created successfully', [
-                                        'student_id' => $student_id,
-                                        'fees_assign_children_id' => $feesChild->id,
-                                    ]);
-                                } else {
-                                    $totalErrors++;
-                                    Log::error('FeesAssignRepository::store - Student control number is empty', [
-                                        'student_id' => $student_id,
-                                    ]);
-                                    return $this->responseWithError('Fees has already been assigned', []);
-                                }
-                            } else {
-                                $totalSkipped++;
-                                Log::info('FeesAssignRepository::store - Fees assign child already exists, skipping', [
-                                    'student_id' => $student_id,
-                                    'fees_assign_id' => $feeAssignId,
-                                    'fees_master_id' => $fees_master,
-                                    'existing_id' => $feeAssignChildren[0]->id ?? null,
-                                ]);
-                            }
-                        } else {
-                            $totalSkipped++;
-                            Log::warning('FeesAssignRepository::store - Skipping student due to invalid fee type', [
-                                'student_id' => $student_id,
-                                'fee_type_id' => $feeTypeId,
-                            ]);
-                        }
+
+                $masterPickList = array_values(array_unique(array_filter(array_map('intval', (array) ($request->fees_master_ids ?? [])))));
+                $pickedUiMasterId = (isset($masterPickList[0]) && $masterPickList[0] > 0) ? $masterPickList[0] : null;
+
+                if ((string) $request->fees_group !== '3' && ($pickedUiMasterId === null || $pickedUiMasterId <= 0)) {
+                    return $this->responseWithError(__('Please select one fee master.'), []);
+                }
+
+                foreach ($request->student_ids as $student_id) {
+                    $studentIdInt = (int) $student_id;
+                    $target = $this->resolveBulkAssignmentTarget($request, $studentIdInt, (int) $sessionId, (int) $feeAssignId, $pickedUiMasterId);
+
+                    if ($target === null) {
+                        $totalSkipped++;
+
+                        continue;
+                    }
+
+                    $insert = $this->insertFeesAssignChildOrSkip((int) $target['fees_assign_id'], (int) $target['fees_master_id'], $studentIdInt);
+                    if ($insert === 'created') {
+                        $totalProcessed++;
+                    } elseif ($insert === 'skipped_duplicate') {
+                        $totalSkipped++;
+                    } else {
+                        $totalErrors++;
+                        Log::error('FeesAssignRepository::store - Student control number is empty', [
+                            'student_id' => $student_id,
+                        ]);
+
+                        return $this->responseWithError(__('Students must have a control number before fees can be assigned.'), []);
                     }
                 }
                 
@@ -344,17 +239,20 @@ class FeesAssignRepository implements FeesAssignInterface
         $result = DB::select('SELECT amount FROM fees_masters where id = ?',[$id])[0]->amount;
         return $result;
     }
-    public function show($id)
-    {
-        return $this->model->find($id);
-    }
 
     public function update($request, $id)
     {
         DB::beginTransaction();
         try {
+            $sessionIdUpdate = (int) setting('session');
+            $normalizedLines = $this->normalizeAssignmentLines($request->input('assignment_lines'));
+            $useLineMode = $normalizedLines !== [];
 
-            if ($request->student_ids == null) {
+            $studentIdsUnion = $useLineMode
+                ? collect($normalizedLines)->flatMap(fn ($l) => $l['student_ids'])->unique()->values()->all()
+                : array_values(array_unique(array_filter(array_map('intval', (array) ($request->student_ids ?? [])))));
+
+            if ($studentIdsUnion === []) {
                 return $this->responseWithError(___('alert.Please select student.'), []);
             }
 
@@ -406,88 +304,78 @@ class FeesAssignRepository implements FeesAssignInterface
             $row->save();
 
             // Delete students that are no longer in the list, but only if paid_amount is 0
-            $diff = array_diff($row->feesAssignChilds->pluck('student_id')->toArray(), $request->student_ids);
-            if (!empty($diff)) {
+            $diff = array_diff($row->feesAssignChilds->pluck('student_id')->toArray(), $studentIdsUnion);
+            if (! empty($diff)) {
                 FeesAssignChildren::where('fees_assign_id', $row->id)
                     ->whereIn('student_id', $diff)
                     ->where('paid_amount', 0)
                     ->delete();
             }
 
-            // 3. Process fees assignments: no duplicate for same (fees_assign, student, fees_master); no duplicate for same (fees_assign, student, fees_group)
-            foreach ($request->fees_master_ids as $fees_master) {
-                foreach ($request->student_ids as $student_id) {
-                    $feeTypeId = 0;
+            // 3. Add / sync lines
+            if ($useLineMode) {
+                if ($msg = $this->validateAssignmentLinesExclusive($normalizedLines)) {
+                    DB::rollBack();
 
-                    if ($request->fees_group == "3") {
-                        $transportProfile = DB::select("
-                            SELECT student_categories.name 
-                            FROM student_categories
-                            INNER JOIN students ON students.student_category_id = student_categories.id
-                            WHERE students.id = ?
-                        ", [$student_id]);
+                    return $this->responseWithError($msg, []);
+                }
+                if ($msg = $this->validateAssignmentMastersBelongToGroup($normalizedLines, (string) $request->fees_group, $sessionIdUpdate)) {
+                    DB::rollBack();
 
-                        if (!empty($transportProfile)) {
-                            $transportProfile = $transportProfile[0]->name;
-                            $transportProfileParts = explode('DAY', $transportProfile);
+                    return $this->responseWithError($msg, []);
+                }
 
-                            if (!empty($transportProfileParts[1])) {
-                                $feeTypeId = DB::select("
-                                    SELECT id FROM fees_types WHERE code = ?
-                                ", [trim($transportProfileParts[1])])[0]->id;
-                                $fees_master = DB::select("
-                                    SELECT id FROM fees_masters WHERE fees_type_id = ?
-                                ", [$feeTypeId])[0]->id;
-                            }
+                $unpaid = FeesAssignChildren::query()->where('fees_assign_id', $row->id);
+                if (Schema::hasColumn('fees_assign_childrens', 'paid_amount')) {
+                    $unpaid->where(function ($q) {
+                        $q->whereNull('paid_amount')->orWhere('paid_amount', 0);
+                    });
+                }
+                $unpaid->delete();
+
+                foreach ($normalizedLines as $line) {
+                    $pickedUiMasterId = (int) $line['fees_master_id'];
+                    foreach ($line['student_ids'] as $student_id) {
+                        $studentIdInt = (int) $student_id;
+                        $target = $this->resolveBulkAssignmentTarget($request, $studentIdInt, $sessionIdUpdate, (int) $row->id, $pickedUiMasterId);
+
+                        if ($target === null) {
+                            continue;
                         }
-                    } else {
-                        $feeTypeId = "1";
+
+                        $insert = $this->insertFeesAssignChildOrSkip((int) $target['fees_assign_id'], (int) $target['fees_master_id'], $studentIdInt);
+
+                        if ($insert === 'skipped_no_control_number') {
+                            DB::rollBack();
+
+                            return $this->responseWithError(__('Students must have a control number before fees can be assigned.'), []);
+                        }
                     }
+                }
+            } else {
+                $masterPickList = array_values(array_unique(array_filter(array_map('intval', (array) ($request->fees_master_ids ?? [])))));
+                $pickedCandidates = $masterPickList;
+                if ((string) $request->fees_group === '3') {
+                    $pickedCandidates = [(isset($masterPickList[0]) && $masterPickList[0] > 0) ? $masterPickList[0] : null];
+                } elseif ($pickedCandidates === []) {
+                    $pickedCandidates = [null];
+                }
 
-                    if ($feeTypeId != 0) {
-                        // Already exists for this (fees_assign_id, fees_master_id, student_id) -> skip
-                        $existingSame = DB::select('
-                            SELECT id FROM fees_assign_childrens 
-                            WHERE fees_assign_id = ? AND fees_master_id = ? AND student_id = ?
-                        ', [$row->id, $fees_master, $student_id]);
+                foreach ($pickedCandidates as $pickedUiMasterId) {
+                    foreach ($studentIdsUnion as $student_id) {
+                        $studentIdInt = (int) $student_id;
+                        $target = $this->resolveBulkAssignmentTarget($request, $studentIdInt, $sessionIdUpdate, (int) $row->id, $pickedUiMasterId);
 
-                        if (!empty($existingSame)) {
+                        if ($target === null) {
                             continue;
                         }
 
-                        // Student already has an assignment in this fees_assign for the same fees_group -> do not duplicate
-                        $sameGroupExists = DB::select('
-                            SELECT fac.id 
-                            FROM fees_assign_childrens fac
-                            INNER JOIN fees_masters fm ON fm.id = fac.fees_master_id
-                            WHERE fac.fees_assign_id = ? AND fac.student_id = ? AND fm.fees_group_id = ?
-                        ', [$row->id, $student_id, $row->fees_group_id]);
+                        $insert = $this->insertFeesAssignChildOrSkip((int) $target['fees_assign_id'], (int) $target['fees_master_id'], $studentIdInt);
 
-                        if (!empty($sameGroupExists)) {
-                            continue;
-                        }
+                        if ($insert === 'skipped_no_control_number') {
+                            DB::rollBack();
 
-                        $controlNumber = $this->getStudentControlNumber($student_id);
-                        if (!empty($controlNumber)) {
-                            $feesChild = new FeesAssignChildren();
-                            $feesChild->fees_assign_id = $row->id;
-                            $feesChild->fees_master_id = $fees_master;
-                            $feesChild->student_id = $student_id;
-                            $feesChild->fees_amount = $this->getFeesAmount($fees_master);
-                            $feesChild->remained_amount = $this->getFeesAmount($fees_master);
-                            $feesChild->control_number = $controlNumber;
-
-                            if ($this->getDueDate($fees_master) > 8) {
-                                $quarterAmount = $this->getFeesAmount($fees_master) / 4;
-                                $feesChild->quater_one = $quarterAmount;
-                                $feesChild->quater_two = $quarterAmount;
-                                $feesChild->quater_three = $quarterAmount;
-                                $feesChild->quater_four = $quarterAmount;
-                            }
-
-                            $feesChild->save();
-                        } else {
-                            return $this->responseWithError('Fees has already been assigned', []);
+                            return $this->responseWithError(__('Students must have a control number before fees can be assigned.'), []);
                         }
                     }
                 }
@@ -507,6 +395,11 @@ class FeesAssignRepository implements FeesAssignInterface
         DB::beginTransaction();
         try {
             $row = $this->model->find($id);
+            if ($row === null) {
+                DB::rollBack();
+
+                return $this->responseWithError(___('alert.something_went_wrong_please_try_again'), []);
+            }
             $row->delete();
             //TO-DO: To clear all fees assign ID on fees_assign_children
 
@@ -530,6 +423,9 @@ class FeesAssignRepository implements FeesAssignInterface
 
         if ($request->category != "") {
             $students = $students->where('students.student_category_id', $request->category);
+        }
+        if ($request->gender != null && $request->gender !== '') {
+            $students = $students->where('students.gender_id', $request->gender);
         }
         Log::info('getFeesAssignStudents - Query Results', [
             'session_id' => setting('session'),
@@ -558,5 +454,278 @@ class FeesAssignRepository implements FeesAssignInterface
             ->get();
     }
 
+    private function getStudentCategoryId(int $studentId): ?int
+    {
+        $id = DB::table('students')->where('id', $studentId)->value('student_category_id');
+
+        return $id !== null ? (int) $id : null;
+    }
+
+    /**
+     * Bulk fees assign/update: enforce fees_type_student_category only for transport (fees_group 3).
+     * School and other groups apply to every selected student (aligned with StudentRepository auto-assign).
+     */
+    private function masterEligibleForStudentBulkAssign($feesGroupId, int $feeTypeId, ?int $studentCategoryId): bool
+    {
+        if ((int) $feesGroupId !== 3) {
+            return true;
+        }
+
+        return $this->feesTypeAllowsStudentCategory($feeTypeId, $studentCategoryId);
+    }
+
+    /**
+     * If pivot has rows for the fee type, student must be in one of those categories.
+     * No pivot rows means no restriction (backward compatible).
+     */
+    private function feesTypeAllowsStudentCategory(int $feeTypeId, ?int $studentCategoryId): bool
+    {
+        if (!Schema::hasTable('fees_type_student_category')) {
+            return true;
+        }
+
+        $restricted = DB::table('fees_type_student_category')
+            ->where('fees_type_id', $feeTypeId)
+            ->exists();
+
+        if (!$restricted) {
+            return true;
+        }
+
+        if ($studentCategoryId === null) {
+            return false;
+        }
+
+        return DB::table('fees_type_student_category')
+            ->where('fees_type_id', $feeTypeId)
+            ->where('student_category_id', $studentCategoryId)
+            ->exists();
+    }
+
+    private function getStudentEnrollmentClassId(int $studentId, int $sessionId): ?int
+    {
+        $id = DB::table('session_class_students')
+            ->where('student_id', $studentId)
+            ->where('session_id', $sessionId)
+            ->value('classes_id');
+
+        return $id !== null ? (int) $id : null;
+    }
+
+    /**
+     * Transport (group 3): master from category; boarding assigns school lodging master elsewhere (no transport line).
+     * Non-transport: prefer fees master for student class + selected group where types are class-linked; otherwise use picked UI master.
+     *
+     * @return array{fees_assign_id:int, fees_master_id:int}|null
+     */
+    private function resolveBulkAssignmentTarget($request, int $studentId, int $sessionId, int $defaultFeesAssignId, ?int $pickedUiMasterId): ?array
+    {
+        $feesGroupId = (string) $request->fees_group;
+        $classIdForForm = (int) $request->class;
+        $sectionId = 1;
+        $catId = $this->getStudentCategoryId($studentId);
+
+        if ($feesGroupId === '3') {
+            if ($this->students->feesAssignIsBoardingStudentCategory($catId)) {
+                $masterId = $this->students->feesAssignResolveBoardingSchoolFeesMasterId($catId);
+                if (! $masterId) {
+                    return null;
+                }
+
+                $masterGroup = DB::table('fees_masters')->where('id', $masterId)->value('fees_group_id');
+                if ($masterGroup === null || $masterGroup === '') {
+                    return null;
+                }
+
+                $assignId = $this->students->feesAssignEnsureFeesAssignContainer($classIdForForm, $masterGroup, $sectionId);
+
+                return ['fees_assign_id' => $assignId, 'fees_master_id' => $masterId];
+            }
+
+            $masterId = $this->students->feesAssignResolveTransportFeesMasterId($catId);
+            if (! $masterId) {
+                return null;
+            }
+
+            $transportTypeId = (int) (DB::table('fees_masters')->where('id', $masterId)->value('fees_type_id') ?? 0);
+            if (! $transportTypeId || ! $this->masterEligibleForStudentBulkAssign(3, $transportTypeId, $catId)) {
+                return null;
+            }
+
+            return ['fees_assign_id' => $defaultFeesAssignId, 'fees_master_id' => $masterId];
+        }
+
+        $targetAssignId = $defaultFeesAssignId;
+
+        if ($this->students->feesAssignIsBoardingStudentCategory($catId)) {
+            $boardMid = $this->students->feesAssignResolveBoardingSchoolFeesMasterId($catId);
+            if ($boardMid) {
+                $g = DB::table('fees_masters')->where('id', $boardMid)->value('fees_group_id');
+                if ($g !== null && $g !== '') {
+                    if ((string) $g === $feesGroupId) {
+                        return ['fees_assign_id' => $targetAssignId, 'fees_master_id' => (int) $boardMid];
+                    }
+
+                    $foreignAssignId = $this->students->feesAssignEnsureFeesAssignContainer($classIdForForm, $g, $sectionId);
+
+                    return ['fees_assign_id' => $foreignAssignId, 'fees_master_id' => (int) $boardMid];
+                }
+            }
+        }
+
+        $enrollmentClassId = $this->getStudentEnrollmentClassId($studentId, $sessionId) ?: $classIdForForm;
+
+        $feeTypeRaw = $this->students->getFeeTypeId($enrollmentClassId);
+        if ($feeTypeRaw !== '' && $feeTypeRaw !== null && (int) $feeTypeRaw > 0) {
+            $classMasterId = DB::table('fees_masters')
+                ->where('session_id', $sessionId)
+                ->where('fees_group_id', $feesGroupId)
+                ->where('fees_type_id', (int) $feeTypeRaw)
+                ->orderBy('id')
+                ->value('id');
+            if ($classMasterId) {
+                return ['fees_assign_id' => $targetAssignId, 'fees_master_id' => (int) $classMasterId];
+            }
+        }
+
+        if ($pickedUiMasterId === null || $pickedUiMasterId <= 0) {
+            return null;
+        }
+
+        $pickedRow = DB::table('fees_masters')
+            ->where('id', $pickedUiMasterId)
+            ->where('session_id', $sessionId)
+            ->where('fees_group_id', $feesGroupId)
+            ->first();
+
+        if (! $pickedRow || ! $pickedRow->fees_type_id) {
+            return null;
+        }
+
+        if (! $this->masterEligibleForStudentBulkAssign($request->fees_group, (int) $pickedRow->fees_type_id, $catId)) {
+            return null;
+        }
+
+        return ['fees_assign_id' => $targetAssignId, 'fees_master_id' => (int) $pickedUiMasterId];
+    }
+
+    /**
+     * Inserts fees_assign_children if not duplicate for (assign × master × student).
+     *
+     * @return string 'created'|'skipped_no_control_number'|'skipped_duplicate'
+     */
+    private function insertFeesAssignChildOrSkip(int $feeAssignId, int $masterId, int $studentId): string
+    {
+        $already = DB::select(
+            'SELECT id FROM fees_assign_childrens WHERE fees_assign_id = ? AND fees_master_id = ? AND student_id = ?',
+            [$feeAssignId, $masterId, $studentId],
+        );
+
+        if (! empty($already)) {
+            return 'skipped_duplicate';
+        }
+
+        $controlNumber = $this->getStudentControlNumber($studentId);
+        if (empty($controlNumber)) {
+            return 'skipped_no_control_number';
+        }
+
+        $feesAmount = $this->getFeesAmount($masterId);
+        $dueDate = $this->getDueDate($masterId);
+
+        $feesChild = new FeesAssignChildren();
+        $feesChild->fees_assign_id = $feeAssignId;
+        $feesChild->fees_master_id = $masterId;
+        $feesChild->student_id = $studentId;
+        $feesChild->fees_amount = $feesAmount;
+        $feesChild->remained_amount = $feesAmount;
+        $feesChild->control_number = $controlNumber;
+
+        if ($dueDate > 8) {
+            [$q1, $q2, $q3, $q4] = FeesMasterQuarter::resolvedQuarterAmounts($masterId, (float) $feesAmount);
+            $feesChild->quater_one = $q1;
+            $feesChild->quater_two = $q2;
+            $feesChild->quater_three = $q3;
+            $feesChild->quater_four = $q4;
+        }
+
+        $feesChild->save();
+
+        return 'created';
+    }
+
+    /**
+     * @return array<int, array{fees_master_id: int, student_ids: int[]}>
+     */
+    private function normalizeAssignmentLines(mixed $raw): array
+    {
+        if (! is_array($raw)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($raw as $line) {
+            if (! is_array($line)) {
+                continue;
+            }
+
+            $mid = (int) ($line['fees_master_id'] ?? 0);
+            $ids = [];
+            foreach ((array) ($line['student_ids'] ?? []) as $sid) {
+                $sid = (int) $sid;
+                if ($sid > 0) {
+                    $ids[$sid] = $sid;
+                }
+            }
+
+            $ids = array_values($ids);
+
+            if ($mid > 0 && $ids !== []) {
+                $out[] = ['fees_master_id' => $mid, 'student_ids' => $ids];
+            }
+        }
+
+        return $out;
+    }
+
+    private function validateAssignmentLinesExclusive(array $lines): ?string
+    {
+        $seenStudent = [];
+
+        foreach ($lines as $line) {
+            foreach ($line['student_ids'] ?? [] as $sid) {
+                $sid = (int) $sid;
+                if ($sid <= 0) {
+                    continue;
+                }
+
+                if (isset($seenStudent[$sid])) {
+                    return __('Each student can only be mapped to one fee type per assignment (same fees group).');
+                }
+
+                $seenStudent[$sid] = true;
+            }
+        }
+
+        return null;
+    }
+
+    private function validateAssignmentMastersBelongToGroup(array $lines, string $feesGroupId, int $sessionId): ?string
+    {
+        foreach ($lines as $line) {
+            $mid = (int) $line['fees_master_id'];
+            $ok = DB::table('fees_masters')
+                ->where('id', $mid)
+                ->where('fees_group_id', $feesGroupId)
+                ->where('session_id', $sessionId)
+                ->exists();
+
+            if (! $ok) {
+                return __('One or more selected fee masters do not belong to this fees group / session.');
+            }
+        }
+
+        return null;
+    }
 
 }

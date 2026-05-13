@@ -43,7 +43,7 @@ class ExpenseController extends Controller
             return response()->json(['data' => $data['expense'], 'meta' => ['title' => $data['title']]]);
         }
 
-        return view('backend.accounts.expense.index', compact('data'));
+        return redirect()->to(url('/app/expense'));
     }
 
     public function index_cash(Request $request): JsonResponse|RedirectResponse
@@ -54,7 +54,7 @@ class ExpenseController extends Controller
         if ($request->expectsJson()) {
             return response()->json(['data' => $data['expense'], 'meta' => $data]);
         }
-        return redirect()->to(url('/app/accounts/cash'));
+        return redirect()->to(url('/app/cash'));
     }
 
     public function index_product(Request $request): JsonResponse|RedirectResponse
@@ -64,7 +64,7 @@ class ExpenseController extends Controller
         if ($request->expectsJson()) {
             return response()->json(['data' => $data['expense'], 'meta' => ['title' => $data['title']]]);
         }
-        return redirect()->to(url('/app/accounts/product'));
+        return redirect()->to(url('/app/product'));
     }
 
     public function index_item(Request $request): JsonResponse|RedirectResponse
@@ -74,7 +74,7 @@ class ExpenseController extends Controller
         if ($request->expectsJson()) {
             return response()->json(['data' => $data['expense'], 'meta' => ['title' => $data['title']]]);
         }
-        return redirect()->to(url('/app/accounts/item'));
+        return redirect()->to(url('/app/item'));
     }
 
      public function index_balance(Request $request): JsonResponse|RedirectResponse
@@ -84,7 +84,7 @@ class ExpenseController extends Controller
         if ($request->expectsJson()) {
             return response()->json(['data' => $data['expense'], 'meta' => ['title' => $data['title']]]);
         }
-        return redirect()->to(url('/app/accounts/balance'));
+        return redirect()->to(url('/app/balance'));
     }
 
     public function create(Request $request): JsonResponse|View
@@ -97,7 +97,7 @@ class ExpenseController extends Controller
             return response()->json(['meta' => $data]);
         }
 
-        return view('backend.accounts.expense.create', compact('data'));
+        return redirect()->to(url('/app/expense/create'));
     }
 
     public function create_product(Request $request): JsonResponse|RedirectResponse{
@@ -108,7 +108,7 @@ class ExpenseController extends Controller
         if ($request->expectsJson()) {
             return response()->json(['meta' => $data]);
         }
-        return redirect()->to(url('/app/accounts/product/create'));
+        return redirect()->to(url('/app/product/create'));
     }
 
      public function create_sell(Request $request): JsonResponse|RedirectResponse{
@@ -116,10 +116,14 @@ class ExpenseController extends Controller
          $data['account_number']           = BankAccounts::all();
         $data['heads']       = $this->accountHeadRepository->getExpenseHeads();
         $data['items']   = DB::select('select * from items');
+        $data['products'] = Product::leftJoin('items', 'items.id', '=', 'products.name')
+            ->select('products.*', 'products.name as item_id', 'items.name as item_name')
+            ->orderBy('items.name')
+            ->get();
         if ($request->expectsJson()) {
             return response()->json(['meta' => $data]);
         }
-        return redirect()->to(url('/app/accounts/product/sell'));
+        return redirect()->to(url('/app/product/sell'));
     }
 
      public function create_item(Request $request): JsonResponse|RedirectResponse{
@@ -129,7 +133,7 @@ class ExpenseController extends Controller
         if ($request->expectsJson()) {
             return response()->json(['meta' => $data]);
         }
-        return redirect()->to(url('/app/accounts/item/create'));
+        return redirect()->to(url('/app/item/create'));
     }
 
     public function store(ExpenseStoreRequest $request): JsonResponse|RedirectResponse
@@ -148,6 +152,12 @@ class ExpenseController extends Controller
     }
 
     public function store_product(Request $request): JsonResponse|RedirectResponse{
+        $request->validate([
+            'name' => 'required',
+            'quantity' => 'required|numeric|min:0',
+            'price' => 'required|numeric|min:0',
+        ]);
+
         DB::beginTransaction();
         try {
            $existingProduct = Product::where('name', $request->name)->first();
@@ -184,7 +194,69 @@ class ExpenseController extends Controller
 
     }
 
+    public function edit_product(Request $request, $id): JsonResponse|RedirectResponse
+    {
+        $data['title'] = 'Edit Product';
+        $data['items'] = DB::select('select * from items');
+        $data['product'] = Product::findOrFail($id);
+        if ($request->expectsJson()) {
+            return response()->json(['data' => $data['product'], 'meta' => $data]);
+        }
+        return redirect()->to(url('/app/product/'.$id.'/edit'));
+    }
+
+    public function update_product(Request $request, $id): JsonResponse|RedirectResponse
+    {
+        $request->validate([
+            'name' => 'required',
+            'quantity' => 'required|numeric|min:0',
+            'remained' => 'nullable|numeric|min:0',
+            'itemout' => 'nullable|numeric|min:0',
+            'price' => 'required|numeric|min:0',
+        ]);
+
+        DB::beginTransaction();
+        try {
+            $product = Product::findOrFail($id);
+            $product->name = $request->name;
+            $product->quantity = $request->quantity ?? 0;
+            $product->remained = $request->remained ?? $request->quantity ?? 0;
+            $product->itemout = $request->itemout ?? 0;
+            $product->price = $request->price ?? 0;
+            $product->save();
+
+            DB::commit();
+            if ($request->expectsJson()) {
+                return response()->json(['message' => ___('alert.updated_successfully')]);
+            }
+            return redirect()->route('product.index')->with('success', ___('alert.updated_successfully'));
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            if ($request->expectsJson()) {
+                return response()->json(['message' => ___('alert.something_went_wrong_please_try_again')], 422);
+            }
+            return back()->with('danger', ___('alert.something_went_wrong_please_try_again'));
+        }
+    }
+
+    public function delete_product($id)
+    {
+        try {
+            Product::findOrFail($id)->delete();
+            return response()->json([___('alert.deleted_successfully'), 'success', ___('alert.deleted'), ___('alert.OK')]);
+        } catch (\Throwable $th) {
+            return response()->json([___('alert.something_went_wrong_please_try_again'), 'error', ___('alert.oops')], 422);
+        }
+    }
+
     public function store_sell(Request $request): JsonResponse|RedirectResponse{
+        $request->validate([
+            'name' => 'required',
+            'quantity' => 'required|numeric|min:1',
+            'date' => 'nullable|date',
+            'receipt' => 'nullable|string|max:255',
+        ]);
+
         DB::beginTransaction();
         try {
            $name = trim($request->name);
@@ -194,10 +266,18 @@ class ExpenseController extends Controller
         if (!$existingProduct) {
             Log::warning('No product found for name: ' . $request->name);
             Log::info($existingProduct);
+            DB::rollBack();
             if ($request->expectsJson()) {
                 return response()->json(['message' => 'Product with this name does not exists.'], 422);
             }
             return back()->with('danger', 'Product with this name does not exists.');
+         }
+         if ((float) $request->quantity > (float) ($existingProduct->remained ?? 0)) {
+            DB::rollBack();
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Sold quantity cannot exceed available stock.'], 422);
+            }
+            return back()->with('danger', 'Sold quantity cannot exceed available stock.');
          }
             if ($existingProduct) {
                 // Update the existing product
@@ -207,7 +287,14 @@ class ExpenseController extends Controller
                 $existingProduct->save();
             } 
              $item = Item::where('id', $request->name)->first();
-             $itemName = AccountHead::where('name', 'Store')->first();
+             $itemName = AccountHead::where('name', 'Store')->first() ?: AccountHead::where('type', \App\Enums\AccountHeadType::INCOME)->first();
+             if (!$item || !$itemName) {
+                DB::rollBack();
+                if ($request->expectsJson()) {
+                    return response()->json(['message' => 'Product item or income head is missing.'], 422);
+                }
+                return back()->with('danger', 'Product item or income head is missing.');
+             }
               $incomeStore                   = new Income();
             $incomeStore->session_id       = setting('session'); 
             $incomeStore->name             = $item->name;
@@ -251,6 +338,11 @@ class ExpenseController extends Controller
     }
 
     public function store_item(Request $request): JsonResponse|RedirectResponse{
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string',
+        ]);
+
         DB::beginTransaction();
         try {
             $expenseStore                   = new Item();
@@ -274,6 +366,54 @@ class ExpenseController extends Controller
 
     }
 
+    public function edit_item(Request $request, $id): JsonResponse|RedirectResponse
+    {
+        $data['title'] = 'Edit Item';
+        $data['item'] = Item::findOrFail($id);
+        if ($request->expectsJson()) {
+            return response()->json(['data' => $data['item'], 'meta' => $data]);
+        }
+        return redirect()->to(url('/app/item/'.$id.'/edit'));
+    }
+
+    public function update_item(Request $request, $id): JsonResponse|RedirectResponse
+    {
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string',
+        ]);
+
+        DB::beginTransaction();
+        try {
+            $item = Item::findOrFail($id);
+            $item->name = $request->name;
+            $item->description = $request->description;
+            $item->save();
+
+            DB::commit();
+            if ($request->expectsJson()) {
+                return response()->json(['message' => ___('alert.updated_successfully')]);
+            }
+            return redirect()->route('item.index')->with('success', ___('alert.updated_successfully'));
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            if ($request->expectsJson()) {
+                return response()->json(['message' => ___('alert.something_went_wrong_please_try_again')], 422);
+            }
+            return back()->with('danger', ___('alert.something_went_wrong_please_try_again'));
+        }
+    }
+
+    public function delete_item($id)
+    {
+        try {
+            Item::findOrFail($id)->delete();
+            return response()->json([___('alert.deleted_successfully'), 'success', ___('alert.deleted'), ___('alert.OK')]);
+        } catch (\Throwable $th) {
+            return response()->json([___('alert.something_went_wrong_please_try_again'), 'error', ___('alert.oops')], 422);
+        }
+    }
+
     public function edit(Request $request, $id): JsonResponse|View
     {
         $data['heads'] = $this->accountHeadRepository->getExpenseHeads();
@@ -284,7 +424,7 @@ class ExpenseController extends Controller
             return response()->json(['data' => $data['expense'], 'meta' => $data]);
         }
 
-        return view('backend.accounts.expense.edit', compact('data'));
+        return redirect()->to(url('/app/expense/'.$id.'/edit'));
     }
 
     public function update(ExpenseUpdateRequest $request, $id): JsonResponse|RedirectResponse

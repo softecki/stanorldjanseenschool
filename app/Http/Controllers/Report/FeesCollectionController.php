@@ -75,52 +75,558 @@ class FeesCollectionController extends Controller
 
     protected function appendFeesCollectionExportMeta(Request $request, array &$meta): void
     {
-        if (! $request->filled('class') || ! $request->filled('section') || ! $request->filled('dates')) {
-            return;
-        }
         try {
-            $encrypted = Crypt::encryptString($request->dates);
-            $meta['pdf_download_url'] = route('report-fees-collection.pdf-generate', [
-                'class' => $request->class,
-                'section' => $request->section,
+            $dates = $request->input('dates');
+            if (! $dates && $request->filled('date_from') && $request->filled('date_to')) {
+                $dates = $request->date_from . ' - ' . $request->date_to;
+            }
+            $encrypted = Crypt::encryptString($dates ?: '__all__');
+            $routeParams = [
+                'class' => $request->input('class', '0') ?: '0',
+                'section' => $request->input('section', '0') ?: '0',
                 'dates' => $encrypted,
-            ]);
-            $meta['excel_download_url'] = route('report-fees-collection.excel-generate', [
-                'class' => $request->class,
-                'section' => $request->section,
-                'dates' => $encrypted,
-            ]);
+            ];
+            $query = array_filter([
+                'balance_status' => $request->input('balance_status'),
+                'fee_group_id' => $request->input('fee_group_id'),
+                'payment_percentage' => $request->input('payment_percentage'),
+            ], fn ($value) => $value !== null && $value !== '');
+            $queryString = $query ? '?' . http_build_query($query) : '';
+
+            $meta['pdf_download_url'] = route('report-fees-collection.pdf-generate', $routeParams) . $queryString;
+            $meta['excel_download_url'] = route('report-fees-collection.excel-generate', $routeParams) . $queryString;
         } catch (\Throwable $e) {
             Log::warning('report-fees-collection: could not build export URLs', ['message' => $e->getMessage()]);
         }
+    }
+
+    protected function feesCollectionReportMeta(Request $request): array
+    {
+        $classId = $request->input('class', '0');
+
+        $meta = [
+            'title' => ___('settings.fees_collection'),
+            'classes' => $this->classRepo->assignedAll(),
+            'sections' => $classId && $classId !== '0' ? $this->classSetupRepo->getSections($classId) : [],
+            'fee_groups' => FeesGroup::where('status', 1)->orderBy('name')->get(['id', 'name']),
+            'filters' => [
+                'class' => $request->input('class', '0'),
+                'section' => $request->input('section', '0'),
+                'balance_status' => $request->input('balance_status', '0'),
+                'dates' => $request->input('dates', ''),
+                'date_from' => $request->input('date_from', ''),
+                'date_to' => $request->input('date_to', ''),
+                'fee_group_id' => $request->input('fee_group_id', '0'),
+                'payment_percentage' => $request->input('payment_percentage', ''),
+            ],
+            'totals' => $this->repo->collectionReportTotals($request),
+        ];
+
+        $this->appendFeesCollectionExportMeta($request, $meta);
+
+        return $meta;
     }
 
     public function index(Request $request): JsonResponse|View
     {
         $data['classes']  = $this->classRepo->assignedAll();
         $data['sections'] = [];
-        $data['result']   = $this->repo->getAll();
+        $data['result']   = $request->expectsJson() ? $this->repo->collectionReport($request) : $this->repo->getAll();
         // dd($data['result']);
         if ($request->expectsJson()) {
-            $meta = [
-                'title' => ___('settings.fees_collection'),
-                'classes' => $data['classes'],
-                'sections' => $data['sections'],
-            ];
-
-            return $this->feesCollectionPaginatedJsonResponse($data['result'], $meta);
+            return $this->feesCollectionPaginatedJsonResponse($data['result'], $this->feesCollectionReportMeta($request));
         }
         return view('backend.report.fees-collection', compact('data'));
     }
+
+    public function sections($class): JsonResponse
+    {
+        return response()->json([
+            'data' => $class && $class !== '0' ? $this->classSetupRepo->getSections($class) : [],
+        ]);
+    }
+
     public function students(Request $request): JsonResponse|View
     {
         $data['classes']  = $this->classRepo->assignedAll();
         $data['sections'] = [];
-        $data['result']   = $this->repo->getAllStudents();
+        $data['result']   = $request->expectsJson() ? $this->studentsReportRows($request) : $this->repo->getAllStudents();
         if ($request->expectsJson()) {
-            return response()->json(['data' => $data['result'], 'meta' => ['classes' => $data['classes'], 'sections' => $data['sections']]]);
+            return $this->studentsReportJsonResponse($data['result'], $this->studentsReportMeta($request, $data));
         }
         return view('backend.report.studentsList', compact('data'));
+    }
+
+    private function normalizeStudentsReportRequest(Request $request): Request
+    {
+        if (! $request->filled('dates') && $request->filled('date_from') && $request->filled('date_to')) {
+            $request->merge([
+                'dates' => $request->date_from . ' - ' . $request->date_to,
+            ]);
+        }
+
+        return $request;
+    }
+
+    private function studentsReportQuery(Request $request)
+    {
+        $request = $this->normalizeStudentsReportRequest($request);
+        $class = trim((string) $request->input('class', '0'));
+        $section = trim((string) $request->input('section', '0'));
+        $q = trim((string) $request->input('q', ''));
+
+        $query = DB::table('students')
+            ->join('session_class_students', function ($join) {
+                $join->on('session_class_students.student_id', '=', 'students.id')
+                    ->where('session_class_students.session_id', setting('session'));
+            })
+            ->join('classes', 'classes.id', '=', 'session_class_students.classes_id')
+            ->join('sections', 'sections.id', '=', 'session_class_students.section_id')
+            ->leftJoin('parent_guardians', 'parent_guardians.id', '=', 'students.parent_guardian_id')
+            ->leftJoin('student_address_history', 'student_address_history.student_id', '=', 'students.id')
+            ->where('session_class_students.classes_id', '!=', 11)
+            ->select(
+                'students.id',
+                'students.first_name',
+                'students.last_name',
+                'students.admission_no',
+                'students.mobile',
+                'students.admission_date',
+                'students.active',
+                'students.residance_address',
+                'student_address_history.student_address',
+                'classes.name as class_name',
+                'classes.id as class_id',
+                'sections.name as section_name',
+                'sections.id as section_id',
+                'parent_guardians.guardian_email',
+                'parent_guardians.guardian_mobile'
+            );
+
+        if ($class !== '' && $class !== '0') {
+            if ($class === 'N') {
+                if ($request->filled('dates')) {
+                    $dates = explode(' - ', $request->dates);
+                    if (count($dates) === 2) {
+                        $query->whereBetween('students.admission_date', [
+                            date('Y-m-d', strtotime($dates[0])),
+                            date('Y-m-d', strtotime($dates[1])),
+                        ]);
+                    }
+                }
+            } elseif ($class === 'SHIFTED') {
+                $query->where('students.active', '2');
+            } else {
+                $query->where('classes.id', $class);
+            }
+        }
+
+        if ($section !== '' && $section !== '0') {
+            $query->where('sections.id', $section);
+        }
+
+        if ($q !== '') {
+            $query->where(function ($sub) use ($q) {
+                $sub->where('students.first_name', 'like', "%{$q}%")
+                    ->orWhere('students.last_name', 'like', "%{$q}%")
+                    ->orWhereRaw("CONCAT(students.first_name, ' ', students.last_name) LIKE ?", ["%{$q}%"])
+                    ->orWhere('students.admission_no', 'like', "%{$q}%")
+                    ->orWhere('students.mobile', 'like', "%{$q}%")
+                    ->orWhere('parent_guardians.guardian_mobile', 'like', "%{$q}%");
+            });
+        }
+
+        return $query->orderBy('classes.name')->orderBy('students.first_name')->orderBy('students.last_name');
+    }
+
+    private function studentsReportRows(Request $request, bool $paginate = true)
+    {
+        $query = $this->studentsReportQuery($request);
+
+        return $paginate ? $query->paginate(50) : $query->get();
+    }
+
+    private function studentsReportMeta(Request $request, array $data): array
+    {
+        $request = $this->normalizeStudentsReportRequest($request);
+        $class = $request->input('class', '0');
+        $query = http_build_query(array_filter([
+            'class' => $class,
+            'section' => $request->input('section', '0'),
+            'q' => $request->input('q', ''),
+            'dates' => $request->input('dates', ''),
+            'date_from' => $request->input('date_from', ''),
+            'date_to' => $request->input('date_to', ''),
+        ], fn ($value) => $value !== null && $value !== ''));
+
+        return [
+            'title' => 'Students Report',
+            'classes' => $data['classes'] ?? $this->classRepo->assignedAll(),
+            'sections' => $class && ! in_array($class, ['0', 'N', 'SHIFTED'], true) ? $this->classSetupRepo->getSections($class) : [],
+            'filters' => [
+                'class' => $class,
+                'section' => $request->input('section', '0'),
+                'q' => $request->input('q', ''),
+                'dates' => $request->input('dates', ''),
+                'date_from' => $request->input('date_from', ''),
+                'date_to' => $request->input('date_to', ''),
+            ],
+            'totals' => [
+                'students_count' => $data['result'] instanceof LengthAwarePaginator ? $data['result']->total() : collect($data['result'])->count(),
+            ],
+            'pdf_download_url' => route('report-students.pdf-generate') . ($query ? '?' . $query : ''),
+            'excel_download_url' => route('report-students.excel-generate') . ($query ? '?' . $query : ''),
+        ];
+    }
+
+    private function studentsReportJsonResponse($result, array $meta): JsonResponse
+    {
+        if ($result instanceof LengthAwarePaginator) {
+            $meta['pagination'] = [
+                'current_page' => $result->currentPage(),
+                'last_page' => $result->lastPage(),
+                'per_page' => $result->perPage(),
+                'total' => $result->total(),
+            ];
+
+            return response()->json(['data' => $result->items(), 'meta' => $meta]);
+        }
+
+        return response()->json(['data' => collect($result)->values()->all(), 'meta' => $meta]);
+    }
+
+    public function outstandingBreakdown(Request $request): JsonResponse|View
+    {
+        $classId = trim((string) $request->query('class_id', ''));
+        $selectedFeeGroups = collect((array) $request->query('fee_groups', []))
+            ->flatMap(fn ($value) => is_string($value) ? explode(',', $value) : [$value])
+            ->map(fn ($value) => (int) $value)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $classes = $this->classRepo->assignedAll();
+        $feeGroups = DB::table('fees_groups')
+            ->join('fees_assigns', function ($join) {
+                $join->on('fees_assigns.fees_group_id', '=', 'fees_groups.id')
+                    ->where('fees_assigns.session_id', setting('session'));
+            })
+            ->join('fees_assign_childrens', 'fees_assign_childrens.fees_assign_id', '=', 'fees_assigns.id')
+            ->select('fees_groups.id', 'fees_groups.name')
+            ->distinct()
+            ->orderBy('fees_groups.name')
+            ->get();
+
+        if (empty($selectedFeeGroups)) {
+            $selectedFeeGroups = $feeGroups->pluck('id')->map(fn ($id) => (int) $id)->all();
+        }
+
+        $selectedFeeTotals = DB::table('fees_assign_childrens as fac')
+            ->join('fees_assigns as fa', function ($join) {
+                $join->on('fa.id', '=', 'fac.fees_assign_id')
+                    ->where('fa.session_id', setting('session'));
+            })
+            ->when(! empty($selectedFeeGroups), function ($query) use ($selectedFeeGroups) {
+                $query->whereIn('fa.fees_group_id', $selectedFeeGroups);
+            })
+            ->select(
+                'fac.student_id',
+                DB::raw('COALESCE(SUM(fac.fees_amount), 0) as total_fees_amount'),
+                DB::raw('COALESCE(SUM(fac.paid_amount), 0) as total_paid_amount'),
+                DB::raw('COALESCE(SUM(fac.remained_amount), 0) as total_remained_amount')
+            )
+            ->groupBy('fac.student_id');
+
+        $studentsQuery = DB::table('students as s')
+            ->join('session_class_students as scs', function ($join) {
+                $join->on('scs.student_id', '=', 's.id')
+                    ->where('scs.session_id', '=', setting('session'));
+            })
+            ->leftJoin('classes as c', 'c.id', '=', 'scs.classes_id')
+            ->leftJoin('sections as sec', 'sec.id', '=', 'scs.section_id')
+            ->leftJoinSub($selectedFeeTotals, 'selected_fee_totals', function ($join) {
+                $join->on('selected_fee_totals.student_id', '=', 's.id');
+            })
+            ->where('scs.classes_id', '!=', 11)
+            ->when($classId !== '', function ($query) use ($classId) {
+                $query->where('scs.classes_id', $classId);
+            })
+            ->select(
+                's.id',
+                's.first_name',
+                's.last_name',
+                's.mobile',
+                'c.name as class_name',
+                'sec.name as section_name',
+                DB::raw('COALESCE(selected_fee_totals.total_fees_amount, 0) as total_fees_amount'),
+                DB::raw('COALESCE(selected_fee_totals.total_paid_amount, 0) as total_paid_amount'),
+                DB::raw('COALESCE(selected_fee_totals.total_remained_amount, 0) as total_remained_amount')
+            )
+            ->orderBy('s.first_name')
+            ->orderBy('s.last_name');
+
+        $rows = $studentsQuery->paginate(100);
+        $studentIds = collect($rows->items())->pluck('id')->all();
+        $breakdowns = empty($studentIds)
+            ? collect()
+            : DB::table('fees_assign_childrens as fac')
+                ->join('fees_assigns as fa', function ($join) {
+                    $join->on('fa.id', '=', 'fac.fees_assign_id')
+                        ->where('fa.session_id', setting('session'));
+                })
+                ->join('fees_groups as fg', 'fg.id', '=', 'fa.fees_group_id')
+                ->whereIn('fac.student_id', $studentIds)
+                ->whereIn('fa.fees_group_id', $selectedFeeGroups)
+                ->select(
+                    'fac.student_id',
+                    'fg.id as fee_group_id',
+                    'fg.name as fee_group_name',
+                    DB::raw('COALESCE(SUM(fac.fees_amount), 0) as fees_amount'),
+                    DB::raw('COALESCE(SUM(fac.paid_amount), 0) as paid_amount'),
+                    DB::raw('COALESCE(SUM(fac.remained_amount), 0) as remained_amount')
+                )
+                ->groupBy('fac.student_id', 'fg.id', 'fg.name')
+                ->get()
+                ->groupBy('student_id');
+
+        $items = collect($rows->items())->map(function ($row) use ($breakdowns) {
+            $row->fee_breakdowns = ($breakdowns[$row->id] ?? collect())->values()->all();
+            return $row;
+        })->all();
+
+        $totalsQuery = DB::query()->fromSub(clone $studentsQuery, 'breakdown_rows');
+        $totals = $totalsQuery
+            ->selectRaw('
+                COUNT(*) as students_count,
+                COALESCE(SUM(total_fees_amount), 0) as total_fees_amount,
+                COALESCE(SUM(total_paid_amount), 0) as total_paid_amount,
+                COALESCE(SUM(total_remained_amount), 0) as total_remained_amount
+            ')
+            ->first();
+
+        $meta = [
+            'title' => 'Break Down Report',
+            'classes' => $classes,
+            'fee_groups' => $feeGroups,
+            'selected_fee_groups' => $selectedFeeGroups,
+            'filters' => ['class_id' => $classId, 'fee_groups' => $selectedFeeGroups],
+            'totals' => [
+                'students_count' => (int) ($totals->students_count ?? 0),
+                'total_fees_amount' => (float) ($totals->total_fees_amount ?? 0),
+                'total_paid_amount' => (float) ($totals->total_paid_amount ?? 0),
+                'total_remained_amount' => (float) ($totals->total_remained_amount ?? 0),
+            ],
+            'pagination' => [
+                'current_page' => $rows->currentPage(),
+                'last_page' => $rows->lastPage(),
+                'per_page' => $rows->perPage(),
+                'total' => $rows->total(),
+            ],
+        ];
+
+        $exportQuery = http_build_query([
+            'class_id' => $classId,
+            'fee_groups' => implode(',', $selectedFeeGroups),
+        ]);
+        $meta['pdf_download_url'] = route('report-outstanding-breakdown.pdf-generate') . '?' . $exportQuery;
+        $meta['excel_download_url'] = route('report-outstanding-breakdown.excel-generate') . '?' . $exportQuery;
+
+        if ($request->expectsJson()) {
+            return response()->json(['data' => $items, 'meta' => $meta]);
+        }
+
+        $data = ['result' => $rows, 'meta' => $meta];
+        return view('backend.report.studentsList', compact('data'));
+    }
+
+    private function outstandingBreakdownExportData(Request $request): array
+    {
+        $classId = trim((string) $request->query('class_id', ''));
+        $selectedFeeGroups = collect((array) $request->query('fee_groups', []))
+            ->flatMap(fn ($value) => is_string($value) ? explode(',', $value) : [$value])
+            ->map(fn ($value) => (int) $value)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $feeGroups = DB::table('fees_groups')
+            ->join('fees_assigns', function ($join) {
+                $join->on('fees_assigns.fees_group_id', '=', 'fees_groups.id')
+                    ->where('fees_assigns.session_id', setting('session'));
+            })
+            ->join('fees_assign_childrens', 'fees_assign_childrens.fees_assign_id', '=', 'fees_assigns.id')
+            ->select('fees_groups.id', 'fees_groups.name')
+            ->distinct()
+            ->orderBy('fees_groups.name')
+            ->get();
+
+        if (empty($selectedFeeGroups)) {
+            $selectedFeeGroups = $feeGroups->pluck('id')->map(fn ($id) => (int) $id)->all();
+        }
+
+        $selectedGroups = $feeGroups->filter(fn ($group) => in_array((int) $group->id, $selectedFeeGroups, true))->values();
+
+        $selectedFeeTotals = DB::table('fees_assign_childrens as fac')
+            ->join('fees_assigns as fa', function ($join) {
+                $join->on('fa.id', '=', 'fac.fees_assign_id')
+                    ->where('fa.session_id', setting('session'));
+            })
+            ->whereIn('fa.fees_group_id', $selectedFeeGroups)
+            ->select(
+                'fac.student_id',
+                DB::raw('COALESCE(SUM(fac.fees_amount), 0) as total_fees_amount'),
+                DB::raw('COALESCE(SUM(fac.paid_amount), 0) as total_paid_amount'),
+                DB::raw('COALESCE(SUM(fac.remained_amount), 0) as total_remained_amount')
+            )
+            ->groupBy('fac.student_id');
+
+        $rows = DB::table('students as s')
+            ->join('session_class_students as scs', function ($join) {
+                $join->on('scs.student_id', '=', 's.id')
+                    ->where('scs.session_id', '=', setting('session'));
+            })
+            ->leftJoin('classes as c', 'c.id', '=', 'scs.classes_id')
+            ->leftJoin('sections as sec', 'sec.id', '=', 'scs.section_id')
+            ->leftJoinSub($selectedFeeTotals, 'selected_fee_totals', function ($join) {
+                $join->on('selected_fee_totals.student_id', '=', 's.id');
+            })
+            ->where('scs.classes_id', '!=', 11)
+            ->when($classId !== '', function ($query) use ($classId) {
+                $query->where('scs.classes_id', $classId);
+            })
+            ->select(
+                's.id',
+                's.first_name',
+                's.last_name',
+                's.mobile',
+                'c.name as class_name',
+                'sec.name as section_name',
+                DB::raw('COALESCE(selected_fee_totals.total_fees_amount, 0) as total_fees_amount'),
+                DB::raw('COALESCE(selected_fee_totals.total_paid_amount, 0) as total_paid_amount'),
+                DB::raw('COALESCE(selected_fee_totals.total_remained_amount, 0) as total_remained_amount')
+            )
+            ->orderBy('s.first_name')
+            ->orderBy('s.last_name')
+            ->get();
+
+        $studentIds = $rows->pluck('id')->all();
+        $breakdowns = empty($studentIds)
+            ? collect()
+            : DB::table('fees_assign_childrens as fac')
+                ->join('fees_assigns as fa', function ($join) {
+                    $join->on('fa.id', '=', 'fac.fees_assign_id')
+                        ->where('fa.session_id', setting('session'));
+                })
+                ->join('fees_groups as fg', 'fg.id', '=', 'fa.fees_group_id')
+                ->whereIn('fac.student_id', $studentIds)
+                ->whereIn('fa.fees_group_id', $selectedFeeGroups)
+                ->select(
+                    'fac.student_id',
+                    'fg.id as fee_group_id',
+                    'fg.name as fee_group_name',
+                    DB::raw('COALESCE(SUM(fac.fees_amount), 0) as fees_amount'),
+                    DB::raw('COALESCE(SUM(fac.paid_amount), 0) as paid_amount'),
+                    DB::raw('COALESCE(SUM(fac.remained_amount), 0) as remained_amount')
+                )
+                ->groupBy('fac.student_id', 'fg.id', 'fg.name')
+                ->get()
+                ->groupBy('student_id');
+
+        $items = $rows->map(function ($row) use ($breakdowns) {
+            $row->fee_breakdowns = ($breakdowns[$row->id] ?? collect())->values()->all();
+            return $row;
+        })->values();
+
+        return [
+            'rows' => $items,
+            'fee_groups' => $selectedGroups,
+            'totals' => [
+                'students_count' => $items->count(),
+                'total_fees_amount' => (float) $items->sum('total_fees_amount'),
+                'total_paid_amount' => (float) $items->sum('total_paid_amount'),
+                'total_remained_amount' => (float) $items->sum('total_remained_amount'),
+            ],
+        ];
+    }
+
+    public function outstandingBreakdownPdf(Request $request)
+    {
+        $data = $this->outstandingBreakdownExportData($request);
+        $pdf = PDF::loadView('backend.report.outstanding-breakdownPDF', compact('data'));
+
+        return $pdf->download('break_down_report_' . date('d_m_Y') . '.pdf');
+    }
+
+    public function outstandingBreakdownExcel(Request $request)
+    {
+        $data = $this->outstandingBreakdownExportData($request);
+        $rows = [];
+
+        foreach ($data['rows'] as $index => $row) {
+            $line = [
+                $index + 1,
+                trim(($row->first_name ?? '') . ' ' . ($row->last_name ?? '')),
+                $row->mobile ?? '',
+                $row->class_name ?? '',
+            ];
+
+            foreach ($data['fee_groups'] as $group) {
+                $breakdown = collect($row->fee_breakdowns)->firstWhere('fee_group_id', $group->id);
+                $line[] = (float) ($breakdown->fees_amount ?? 0);
+                $line[] = (float) ($breakdown->paid_amount ?? 0);
+                $line[] = (float) ($breakdown->remained_amount ?? 0);
+            }
+
+            $line[] = (float) ($row->total_fees_amount ?? 0);
+            $line[] = (float) ($row->total_paid_amount ?? 0);
+            $line[] = (float) ($row->total_remained_amount ?? 0);
+            $rows[] = $line;
+        }
+
+        $headings = ['No.', 'Student Name', 'Phone Number', 'Class'];
+        foreach ($data['fee_groups'] as $group) {
+            $headings[] = $group->name . ' Fees';
+            $headings[] = $group->name . ' Paid';
+            $headings[] = $group->name . ' Remained';
+        }
+        $headings[] = 'Total Fees';
+        $headings[] = 'Total Paid';
+        $headings[] = 'Total Remained';
+
+        $export = new class($rows, $headings) implements FromArray, WithHeadings, WithEvents {
+            private array $rows;
+            private array $headings;
+
+            public function __construct(array $rows, array $headings)
+            {
+                $this->rows = $rows;
+                $this->headings = $headings;
+            }
+
+            public function array(): array
+            {
+                return $this->rows;
+            }
+
+            public function headings(): array
+            {
+                return $this->headings;
+            }
+
+            public function registerEvents(): array
+            {
+                return [
+                    AfterSheet::class => function (AfterSheet $event) {
+                        $lastColumn = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($this->headings));
+                        $event->sheet->getDelegate()->getStyle('A1:' . $lastColumn . '1')->getFont()->setBold(true);
+                    },
+                ];
+            }
+        };
+
+        return Excel::download($export, 'Break_Down_Report.xlsx');
     }
 
     public function getTotalPaid($id){
@@ -130,12 +636,13 @@ class FeesCollectionController extends Controller
 
     public function searchStudents(Request $request): JsonResponse|View
     {
+        $request = $this->normalizeStudentsReportRequest($request);
         $data['classes']  = $this->classRepo->assignedAll();
-        $data['sections'] = [];
-        $data['result']   = $this->repo->getAllStudentsSearch($request->class,$request->dates);
+        $data['sections'] = $request->class && ! in_array($request->class, ['0', 'N', 'SHIFTED'], true) ? $this->classSetupRepo->getSections($request->class) : [];
+        $data['result']   = $request->expectsJson() ? $this->studentsReportRows($request) : $this->repo->getAllStudentsSearch($request->class, $request->dates);
         $data['request']  = $request;
         if ($request->expectsJson()) {
-            return response()->json(['data' => $data['result'], 'meta' => ['classes' => $data['classes'], 'sections' => $data['sections']]]);
+            return $this->studentsReportJsonResponse($data['result'], $this->studentsReportMeta($request, $data));
         }
         return view('backend.report.studentsList', compact('data'));
     }
@@ -241,11 +748,7 @@ class FeesCollectionController extends Controller
             LEFT JOIN classes ON classes.id = session_class_students.classes_id
             WHERE YEAR(fees_assign_childrens.created_at) = ?
         ";
-        if($year == 2025){
-            $session = 8;
-        }else{
-            $session = 9;
-        }
+        $session = setting('session');
         $params = [$session, $session, $year];
         
         // Add class filter if provided
@@ -778,7 +1281,7 @@ class FeesCollectionController extends Controller
     {
         $data['classes']      = $this->classRepo->assignedAll();
         $data['sections']     = [];
-        $data['result']       = $this->repo->getAll();
+        $data['result']       = $request->expectsJson() ? $this->repo->getAllSumary($request) : $this->repo->getAll();
         $data['total_amount'] = DB::table('fees_assign_childrens')
             ->join('fees_assigns', 'fees_assigns.id', '=', 'fees_assign_childrens.fees_assign_id')
             ->where('fees_assigns.fees_group_id', '!=', '1')
@@ -802,22 +1305,85 @@ class FeesCollectionController extends Controller
             ->sum('remained_amount');
 
         if ($request->expectsJson()) {
-            $meta = [
-                'title' => 'Fees Summary',
-                'classes' => $data['classes'],
-                'sections' => $data['sections'],
-                'totals' => [
-                    'total_amount' => $data['total_amount'],
-                    'paid_amount' => $data['paid_amount'],
-                    'remained_amount' => $data['remained_amount'],
-                    'paid_amount_outstanding' => $data['paid_amount_outstanding'],
-                    'remained_amount_outstanding' => $data['remained_amount_outstanding'],
-                ],
-            ];
+            $meta = $this->feesSummaryMeta($request, $data);
 
             return $this->feesCollectionPaginatedJsonResponse($data['result'], $meta);
         }
         return view('backend.report.fees-summary', compact('data'));
+    }
+
+    private function normalizeFeesSummaryRequest(Request $request): Request
+    {
+        if (! $request->filled('dates') && $request->filled('date_from') && $request->filled('date_to')) {
+            $request->merge([
+                'dates' => $request->date_from . ' - ' . $request->date_to,
+            ]);
+        }
+
+        return $request;
+    }
+
+    private function feesSummaryTotalsFromResult($result): array
+    {
+        $rows = $result instanceof LengthAwarePaginator ? collect($result->items()) : collect($result);
+
+        return [
+            'total_amount' => (float) $rows->sum(fn ($row) => (float) ($row->fees_amount ?? 0)),
+            'paid_amount' => (float) $rows->sum(fn ($row) => (float) ($row->paid_amount ?? 0)),
+            'remained_amount' => (float) $rows->sum(fn ($row) => (float) ($row->remained_amount ?? 0)),
+            'outstanding_amount' => (float) $rows->sum(fn ($row) => (float) ($row->outstanding_amount ?? 0)),
+            'paid_amount_outstanding' => (float) $rows->sum(fn ($row) => (float) ($row->outstanding_paid_amount ?? 0)),
+            'remained_amount_outstanding' => (float) $rows->sum(fn ($row) => (float) ($row->outstanding_remained_amount ?? 0)),
+            'transport_amount' => (float) $rows->sum(fn ($row) => (float) ($row->group3_amount ?? 0)),
+            'transport_paid_amount' => (float) $rows->sum(fn ($row) => (float) ($row->group3_paid_amount ?? 0)),
+            'transport_remained_amount' => (float) $rows->sum(fn ($row) => (float) ($row->group3_remained_amount ?? 0)),
+            'lunch_amount' => (float) $rows->sum(fn ($row) => (float) ($row->group4_amount ?? 0)),
+            'admission_fees_amount' => (float) $rows->sum(fn ($row) => (float) ($row->admission_fees_amount ?? 0)),
+            'fees_excluding_outstanding' => (float) $rows->sum(fn ($row) => (float) ($row->fees_amount_excluding_outstanding ?? 0)),
+            'total_assigned_amount' => (float) $rows->sum(fn ($row) => (float) ($row->total_assigned_amount ?? 0)),
+            'paid_from_collections' => (float) $rows->sum(fn ($row) => (float) ($row->paid_from_collections ?? 0)),
+            'remained_after_collections' => (float) $rows->sum(fn ($row) => (float) ($row->remained_after_collections ?? 0)),
+            'students_count' => $rows->count(),
+        ];
+    }
+
+    private function feesSummaryExportQuery(Request $request): string
+    {
+        return http_build_query(array_filter([
+            'class' => $request->input('class', '0'),
+            'section' => $request->input('section', '0'),
+            'fee_group_id' => $request->input('fee_group_id', '0'),
+            'amount' => $request->input('amount', ''),
+            'dates' => $request->input('dates', ''),
+            'date_from' => $request->input('date_from', ''),
+            'date_to' => $request->input('date_to', ''),
+        ], fn ($value) => $value !== null && $value !== ''));
+    }
+
+    private function feesSummaryMeta(Request $request, array $data): array
+    {
+        $request = $this->normalizeFeesSummaryRequest($request);
+        $classId = $request->input('class', '0');
+        $query = $this->feesSummaryExportQuery($request);
+
+        return [
+            'title' => 'Fees Summary',
+            'classes' => $data['classes'] ?? $this->classRepo->assignedAll(),
+            'sections' => $classId && $classId !== '0' ? $this->classSetupRepo->getSections($classId) : [],
+            'fee_groups' => FeesGroup::where('status', 1)->orderBy('name')->get(['id', 'name']),
+            'filters' => [
+                'class' => $request->input('class', '0'),
+                'section' => $request->input('section', '0'),
+                'fee_group_id' => $request->input('fee_group_id', '0'),
+                'amount' => $request->input('amount', ''),
+                'dates' => $request->input('dates', ''),
+                'date_from' => $request->input('date_from', ''),
+                'date_to' => $request->input('date_to', ''),
+            ],
+            'totals' => $this->feesSummaryTotalsFromResult($data['result']),
+            'pdf_download_url' => route('report-fees-summary.pdf-generate') . ($query ? '?' . $query : ''),
+            'excel_download_url' => route('report-fees-summary.excel-generate') . ($query ? '?' . $query : ''),
+        ];
     }
 
     /**
@@ -835,7 +1401,7 @@ class FeesCollectionController extends Controller
 
             $previousYear = 2025;
             $newYear = 2026;
-            $newSessionId = 9; // Session ID for 2026 (fixed as per requirement)
+            $newSessionId = setting('session');
 
             // Step 1: Get Outstanding Balance fees_group_id (should be 1 based on codebase)
             $outstandingBalanceGroup = DB::select("
@@ -960,7 +1526,7 @@ class FeesCollectionController extends Controller
                     }
 
                     // Step 7: Check if Outstanding Balance already exists for this student in 2026 session
-                    // Check by fees_master_id (53) and student_id in session 9 to avoid duplicates
+                    // Check by fees_master_id (53) and student_id in active session to avoid duplicates
                     // We check via fees_assigns to ensure it's in the correct session
                     $existingOutstanding = DB::select("
                         SELECT fees_assign_childrens.id 
@@ -1084,7 +1650,7 @@ class FeesCollectionController extends Controller
 
             $previousYear = 2025;
             $newYear = 2026;
-            $newSessionId = 9; // Session ID for 2026 (fixed as per requirement)
+            $newSessionId = setting('session');
 
             // Step 1: Get Outstanding Balance fees_group_id
             $outstandingBalanceGroup = DB::select("
@@ -1936,8 +2502,9 @@ class FeesCollectionController extends Controller
 
     public function searchFeeSummary(Request $request): JsonResponse|View
     {
+        $request = $this->normalizeFeesSummaryRequest($request);
         $data['classes']  = $this->classRepo->assignedAll();
-        $data['sections'] = [];
+        $data['sections'] = $request->class && $request->class !== '0' ? $this->classSetupRepo->getSections($request->class) : [];
         $data['result']   = $this->repo->getAllSumary($request);
 
         $baseQuery        = DB::table('fees_assign_childrens')
@@ -1987,152 +2554,80 @@ class FeesCollectionController extends Controller
 
         $data['request'] = $request;
         if ($request->expectsJson()) {
-            return response()->json(['data' => $data['result'], 'meta' => $data]);
+            return $this->feesCollectionPaginatedJsonResponse($data['result'], $this->feesSummaryMeta($request, $data));
         }
         return view('backend.report.fees-summary', compact('data'));
     }
 
     public function search(FeesCollectionRequest $request): JsonResponse|View
     {
-        $data['result']   = $this->repo->search($request);
+        $data['result']   = $request->expectsJson() ? $this->repo->collectionReport($request) : $this->repo->search($request);
         $data['request']  = $request;
         $data['classes']  = $this->classRepo->assignedAll();
         $data['sections'] = $this->classSetupRepo->getSections($request->class);
         if ($request->expectsJson()) {
-            $meta = [
-                'classes' => $data['classes'],
-                'sections' => $data['sections'],
-                'filters' => [
-                    'class' => $request->class,
-                    'section' => $request->section,
-                    'dates' => $request->input('dates'),
-                    'amount' => $request->input('amount'),
-                ],
-            ];
-            $this->appendFeesCollectionExportMeta($request, $meta);
-
-            return $this->feesCollectionPaginatedJsonResponse($data['result'], $meta);
+            return $this->feesCollectionPaginatedJsonResponse($data['result'], $this->feesCollectionReportMeta($request));
         }
         return view('backend.report.fees-collection', compact('data'));
     }
 
     public function generatePDF($class, $section, $dates)
     {
-        $request = new Request([
+        $decodedDates = Crypt::decryptString($dates);
+        $request = new Request(array_merge([
             'class'   => $class,
-            'dates'   => Crypt::decryptString($dates),
+            'dates'   => $decodedDates === '__all__' ? '' : $decodedDates,
             'section' => $section,
-        ]);
+        ], request()->query()));
 
-        $data['result']    = $this->repo->searchPDF($request);
-        $data['printedby'] = Auth::user()->name;
+        $data['result']    = $this->repo->collectionReport($request, false);
+        $data['totals']    = $this->repo->collectionReportTotals($request);
+        $data['filters']   = $this->feesCollectionReportMeta($request)['filters'];
+        $data['printedby'] = Auth::user()?->name;
 
-        \Illuminate\Support\Facades\Log::info($data['result']);
         $pdf = PDF::loadView('backend.report.fees-collectionPDF', compact('data'));
         return $pdf->download('fees_collection' . '_' . date('d_m_Y') . '.pdf');
     }
 
     public function generateExcel($class, $section, $dates)
     {
-        $request = new Request([
+        $decodedDates = Crypt::decryptString($dates);
+        $request = new Request(array_merge([
             'class'   => $class,
-            'dates'   => Crypt::decryptString($dates),
+            'dates'   => $decodedDates === '__all__' ? '' : $decodedDates,
             'section' => $section,
-        ]);
+        ], request()->query()));
 
-        $dates = explode(' - ', $request->dates);
+        $rows = $this->repo->collectionReport($request, false)->values();
+        $totals = $this->repo->collectionReportTotals($request);
+        $reportData = $rows->map(function ($row, $index) {
+            $remaining = (float) ($row->remained_amount ?? 0);
 
-        // Parse start and end dates
-        $startDate = date('Y-m-d', strtotime($dates[0] ?? 'now'));
-        $endDate   = date('Y-m-d', strtotime($dates[1] ?? 'now'));
+            return [
+                $index + 1,
+                trim(($row->first_name ?? '') . ' ' . ($row->last_name ?? '')),
+                $row->mobile ?? '',
+                $row->class_name ?? '',
+                $row->section_name ?? '',
+                (float) ($row->total_fees_amount ?? 0),
+                (float) ($row->paid_amount ?? 0),
+                $remaining,
+                $remaining > 0 ? 'With balance' : 'Paid',
+            ];
+        })->all();
 
-        // Query the database
-        $feesQuery = DB::table('fees_assign_childrens')
-            ->join('fees_assigns', function($join) {
-                $join->on('fees_assigns.id', '=', 'fees_assign_childrens.fees_assign_id')
-                     ->where('fees_assigns.session_id', setting('session'));
-            })
-            ->join('students', 'students.id', '=', 'fees_assign_childrens.student_id')
-            ->join('session_class_students', function($join) {
-                $join->on('students.id', '=', 'session_class_students.student_id')
-                     ->where('session_class_students.session_id', setting('session'));
-            })
-            ->join('classes', 'session_class_students.classes_id', '=', 'classes.id')
-            ->join('fees_masters', 'fees_masters.id', '=', 'fees_assign_childrens.fees_master_id')
-            ->join('fees_types', 'fees_types.id', '=', 'fees_masters.fees_type_id')
-            ->whereBetween('fees_assign_childrens.created_at', [$startDate, $endDate])
-            ->select(
-                DB::raw("students.id as id, CONCAT(students.first_name, ' ', students.last_name) AS full_name"),
-                'mobile',
-                'classes.name AS class_name',
-                DB::raw("CASE WHEN fees_types.id = 11 THEN 2024 ELSE 2025 END AS year"),
-                DB::raw("CASE WHEN 1 = 1 THEN 'DAY' ELSE 'BOARDING' END AS status"),
-                'fees_types.name AS fees_type',
-                'fees_assign_childrens.created_at AS date',
-                'fees_assign_childrens.fees_amount AS fees_amount',
-                'fees_assign_childrens.paid_amount AS paid_amount',
-                'fees_assign_childrens.remained_amount AS amount'
-            );
+        $reportData[] = [
+            '',
+            'TOTAL',
+            '',
+            '',
+            '',
+            (float) ($totals['total_fees_amount'] ?? 0),
+            (float) ($totals['paid_amount'] ?? 0),
+            (float) ($totals['remained_amount'] ?? 0),
+            '',
+        ];
 
-        $feesQuery = DB::table('students')
-            ->join('fees_assign_childrens as a', 'students.id', '=', 'a.student_id')
-            ->leftJoin('fees_assign_childrens as b', function ($join) {
-                $join->on('students.id', '=', 'b.student_id')
-                    ->whereColumn('b.id', '!=', 'a.id'); // Avoid self-matching
-            })
-            ->join('fees_assigns', function($join) {
-                $join->on('fees_assigns.id', '=', 'a.fees_assign_id')
-                     ->where('fees_assigns.session_id', setting('session'));
-            })
-            ->join('session_class_students', function($join) {
-                $join->on('students.id', '=', 'session_class_students.student_id')
-                     ->where('session_class_students.session_id', setting('session'));
-            })
-            ->join('classes', 'session_class_students.classes_id', '=', 'classes.id')
-            ->join('fees_masters', 'fees_masters.id', '=', 'a.fees_master_id')
-            ->join('fees_types', 'fees_types.id', '=', 'fees_masters.fees_type_id')
-            ->whereBetween('a.created_at', [$startDate, $endDate])
-            ->where('fees_masters.fees_group_id', '=', '1')
-            ->select(
-                DB::raw("students.id as id, CONCAT(students.first_name, ' ', students.last_name) AS full_name"),
-                'mobile',
-                'classes.name AS class_name',
-                DB::raw("CASE WHEN fees_types.id = 11 THEN 2024 ELSE 2025 END AS year"),
-                DB::raw("'DAY' AS status"), // Static value for status
-                'fees_types.name AS fees_type',
-                'a.created_at AS date',
-                'a.fees_amount AS fees_amount',
-                DB::raw("COALESCE(b.fees_amount, 0) AS b_fees_amount"), // Handle null for b
-                'a.paid_amount AS paid_amount',
-                DB::raw("COALESCE(b.paid_amount, 0) AS b_paid_amount"),
-                'a.remained_amount AS amount',
-                DB::raw("COALESCE(b.remained_amount, 0) AS b_amount"),
-                'a.updated_at as a_updated_at',
-                DB::raw("COALESCE(b.updated_at, NULL) as b_updated_at"),
-                DB::raw("COALESCE(b.quater_one, 0) as quater_one"),
-                DB::raw("COALESCE(b.quater_two, 0) as quater_two"),
-                DB::raw("COALESCE(b.quater_three, 0) as quater_three"),
-                DB::raw("COALESCE(b.quater_four, 0) as quater_four"),
-                DB::raw("COALESCE(b.quater_amount, 0) as quater_amount")
-            );
-
-        if ($request->class != "0") {
-            $feesQuery->where('session_class_students.classes_id', '=', $request->class);
-        }
-
-        if ($request->section == 1) {
-            $feesQuery->where('b.remained_amount', '=', '0');
-        } elseif ($request->section == 2) {
-            $feesQuery->where('b.remained_amount', '>', '0');
-        }
-
-        $feesQuery->orderBy('full_name', 'ASC');
-        $data = $feesQuery->get()->toArray();
-
-        // Prepare the data for the report
-        $reportData = $this->formatReportData($data);
-
-        // Generate Excel
         $export = new class($reportData) implements FromArray, WithHeadings, WithEvents
         {
             protected $data;
@@ -2152,18 +2647,13 @@ class FeesCollectionController extends Controller
                 return [
                     'No.',
                     'Student Name',
-                    'Year',
-                    'Class',
-                    'Status',
-                    'Receipt Date',
-                    'Q',
-                    'Fees Per Year',
-                    'q',
-                    'Paid Amount (TZS)',
-                    'Outstanding Amount (2024)',
-                    'Remaining Amount (TZS) 2025',
                     'Phone Number',
-                    'Reconciliation With Bank',
+                    'Class',
+                    'Section',
+                    'Total Fees Assigned',
+                    'Total Paid',
+                    'Remaining Amount',
+                    'Status',
                 ];
             }
 
@@ -2172,7 +2662,7 @@ class FeesCollectionController extends Controller
                 return [
                     AfterSheet::class => function (AfterSheet $event) {
                         $sheet = $event->sheet->getDelegate();
-                        $sheet->getStyle('A1:K1')->getFont()->setBold(true);
+                        $sheet->getStyle('A1:I1')->getFont()->setBold(true);
                     },
                 ];
             }
@@ -2180,6 +2670,112 @@ class FeesCollectionController extends Controller
 
         return Excel::download($export, 'Collection_Report.xlsx');
     }
+
+    private function feesSummaryExportData(Request $request): array
+    {
+        $request = $this->normalizeFeesSummaryRequest($request);
+        $result = $this->repo->getAllSumary($request);
+        $rows = $result instanceof LengthAwarePaginator ? collect($result->items()) : collect($result);
+
+        return [
+            'rows' => $rows->values(),
+            'totals' => $this->feesSummaryTotalsFromResult($result),
+            'filters' => [
+                'class' => $request->input('class', '0'),
+                'section' => $request->input('section', '0'),
+                'fee_group_id' => $request->input('fee_group_id', '0'),
+                'amount' => $request->input('amount', ''),
+                'dates' => $request->input('dates', ''),
+            ],
+        ];
+    }
+
+    public function generateSummaryPDF(Request $request)
+    {
+        $data = $this->feesSummaryExportData($request);
+        $pdf = PDF::loadView('backend.report.fees-summaryPDF', compact('data'));
+
+        return $pdf->download('fees_summary_' . date('d_m_Y') . '.pdf');
+    }
+
+    public function generateSummaryExcelReport(Request $request)
+    {
+        $data = $this->feesSummaryExportData($request);
+        $reportRows = $data['rows']->map(function ($row, $index) {
+            $status = (string) ($row->active ?? '') === '2' ? 'Shifted' : 'Active';
+
+            return [
+                $index + 1,
+                trim(($row->first_name ?? '') . ' ' . ($row->last_name ?? '')),
+                $row->class_name ?? '',
+                $row->mobile ?? '',
+                $status,
+                (float) ($row->outstanding_remained_amount ?? 0),
+                (float) ($row->total_assigned_amount ?? 0),
+                (float) ($row->fees_amount_excluding_outstanding ?? 0),
+                (float) ($row->paid_from_collections ?? 0),
+                (float) ($row->remained_after_collections ?? 0),
+                (string) ($row->assign_comments ?? ''),
+            ];
+        })->all();
+
+        $reportRows[] = [
+            '',
+            'TOTAL',
+            '',
+            '',
+            '',
+            (float) ($data['totals']['remained_amount_outstanding'] ?? 0),
+            (float) ($data['totals']['total_assigned_amount'] ?? 0),
+            (float) ($data['totals']['fees_excluding_outstanding'] ?? 0),
+            (float) ($data['totals']['paid_from_collections'] ?? 0),
+            (float) ($data['totals']['remained_after_collections'] ?? 0),
+            '',
+        ];
+
+        $export = new class($reportRows) implements FromArray, WithHeadings, WithEvents {
+            protected $rows;
+
+            public function __construct(array $rows)
+            {
+                $this->rows = $rows;
+            }
+
+            public function array(): array
+            {
+                return $this->rows;
+            }
+
+            public function headings(): array
+            {
+                return [
+                    'No.',
+                    'Student Name',
+                    'Class',
+                    'Phone Number',
+                    'Status',
+                    'Outstanding Fee',
+                    'Total Amount',
+                    'Fees Amount',
+                    'Paid Amount',
+                    'Remained Amount',
+                    'Comment',
+                ];
+            }
+
+            public function registerEvents(): array
+            {
+                return [
+                    AfterSheet::class => function (AfterSheet $event) {
+                        $event->sheet->getDelegate()->getStyle('A1:K1')->getFont()->setBold(true);
+                    },
+                ];
+            }
+        };
+
+        return Excel::download($export, 'Fees_Summary_Report.xlsx');
+    }
+
   public function generateSummaryExcel($class, $section, $dates, $fee_group_id,$amount = null)
     {
         $amount = $amount ?? 0; 
@@ -3112,12 +3708,19 @@ $groups = $groups
         }
     }
 
-    public function generateStudentsExcel($class)
+    public function generateStudentsPDF(Request $request)
     {
-        $request = new Request([
-            'class' => $class,
-            // 'dates' => $dates
-        ]);
+        $data = [
+            'rows' => $this->studentsReportRows($request, false)->values(),
+        ];
+        $data['totals'] = ['students_count' => $data['rows']->count()];
+        $pdf = PDF::loadView('backend.report.studentsPDF', compact('data'));
+
+        return $pdf->download('students_report_' . date('d_m_Y') . '.pdf');
+    }
+
+    public function generateStudentsExcel(Request $request)
+    {
         // Define the database fields and their custom column headings
         $columns = [
             'id'              => 'No.',
@@ -3131,33 +3734,21 @@ $groups = $groups
             
         ];
 
-        $groups = DB::table('students')
-            ->join('session_class_students', 'session_class_students.student_id', '=', 'students.id')
-            ->join('classes', 'classes.id', '=', 'session_class_students.classes_id')
-            ->join('sections', 'sections.id', '=', 'session_class_students.section_id')
-            ->join('parent_guardians', 'parent_guardians.id', '=', 'students.parent_guardian_id')
-            ->leftjoin('student_address_history', 'student_address_history.student_id', '=', 'students.id')
-            ->where('session_class_students.session_id', setting('session'))
-            ->select(
-                'students.id',
-                DB::raw('CONCAT(students.first_name, " ", students.last_name) as full_name'),
-                'classes.name as class_name',
-                'sections.name as section_name',
-                'parent_guardians.guardian_email',
-                'parent_guardians.guardian_mobile',
-                'students.residance_address',
-                'student_address_history.student_address'
-                
-            );
-            if ($class != "") {
-            if ($class != "0" && $class != "N" && $class != "SHIFTED") {
-                $groups = $groups->where('classes.id', $class);
-            }
-        }
-     
-        $groups->orderBy('full_name', 'ASC');
-
-        $data = $groups->get()->toArray();
+        $data = $this->studentsReportRows($request, false)
+            ->values()
+            ->map(function ($row, $index) {
+                return [
+                    'id' => $index + 1,
+                    'full_name' => trim(($row->first_name ?? '') . ' ' . ($row->last_name ?? '')),
+                    'class_name' => $row->class_name ?? '',
+                    'section_name' => $row->section_name ?? '',
+                    'guardian_email' => $row->guardian_email ?? '',
+                    'guardian_mobile' => $row->guardian_mobile ?? $row->mobile ?? '',
+                    'residance_address' => $row->residance_address ?? '',
+                    'student_address' => $row->student_address ?? '',
+                ];
+            })
+            ->all();
 
         $export = new class($data, $columns) implements FromArray, WithHeadings, WithEvents
         {
@@ -3206,68 +3797,10 @@ $groups = $groups
      */
     public function boardingStudents(Request $request): JsonResponse|View
     {
-        $currentYear = date('Y');
-        
-        // Get boarding students with their school fees grouped by year
-        $data['result'] = DB::select("
-            SELECT 
-                students.id as student_id,
-                students.first_name,
-                students.last_name,
-                students.admission_no,
-                YEAR(fees_assign_childrens.created_at) as year,
-                MAX(classes.name) as class_name,
-                MAX(sections.name) as section_name,
-                SUM(CASE 
-                    WHEN fees_groups.name = 'School Fees' 
-                    THEN fees_assign_childrens.fees_amount 
-                    ELSE 0 
-                END) as school_fees_amount,
-                SUM(CASE 
-                    WHEN fees_groups.name = 'School Fees' 
-                    THEN fees_assign_childrens.paid_amount 
-                    ELSE 0 
-                END) as school_fees_paid,
-                SUM(CASE 
-                    WHEN fees_groups.name = 'School Fees' 
-                    THEN fees_assign_childrens.remained_amount 
-                    ELSE 0 
-                END) as school_fees_remained,
-                SUM(CASE 
-                    WHEN fees_groups.name = 'School Fees' 
-                    THEN fees_assign_childrens.outstandingbalance 
-                    ELSE 0 
-                END) as school_fees_outstanding
-            FROM students
-            INNER JOIN fees_assign_childrens ON fees_assign_childrens.student_id = students.id
-            INNER JOIN fees_assigns ON fees_assigns.id = fees_assign_childrens.fees_assign_id
-            INNER JOIN fees_groups ON fees_groups.id = fees_assigns.fees_group_id
-            LEFT JOIN session_class_students ON session_class_students.student_id = students.id 
-                AND session_class_students.session_id = fees_assigns.session_id
-            LEFT JOIN classes ON classes.id = session_class_students.classes_id
-            LEFT JOIN sections ON sections.id = session_class_students.section_id
-            WHERE (students.category_id = 1 OR students.student_category_id = 1)
-              AND fees_groups.name = 'School Fees'
-            GROUP BY students.id, students.first_name, students.last_name, students.admission_no, YEAR(fees_assign_childrens.created_at)
-            ORDER BY YEAR(fees_assign_childrens.created_at) DESC, students.first_name ASC, students.last_name ASC
-        ");
-
-        // Get available years
-        $data['years'] = DB::select("
-            SELECT DISTINCT YEAR(fees_assign_childrens.created_at) as year
-            FROM students
-            INNER JOIN fees_assign_childrens ON fees_assign_childrens.student_id = students.id
-            INNER JOIN fees_assigns ON fees_assigns.id = fees_assign_childrens.fees_assign_id
-            INNER JOIN fees_groups ON fees_groups.id = fees_assigns.fees_group_id
-            WHERE (students.category_id = 1 OR students.student_category_id = 1)
-              AND fees_groups.name = 'School Fees'
-            ORDER BY year DESC
-        ");
-
-        $data['selected_year'] = $currentYear;
+        $data = $this->boardingStudentsData($request->year);
         
         if ($request->expectsJson()) {
-            return response()->json(['data' => $data['result'], 'meta' => $data]);
+            return response()->json(['data' => $data['result'], 'meta' => $this->boardingStudentsMeta($data)]);
         }
         return view('backend.report.boarding-students', compact('data'));
     }
@@ -3280,9 +3813,77 @@ $groups = $groups
      */
     public function searchBoardingStudents(Request $request): JsonResponse|View
     {
-        $year = $request->year ?? date('Y');
+        $data = $this->boardingStudentsData($request->year);
+        $data['request'] = $request;
         
-        $query = "
+        if ($request->expectsJson()) {
+            return response()->json(['data' => $data['result'], 'meta' => $this->boardingStudentsMeta($data)]);
+        }
+        return view('backend.report.boarding-students', compact('data'));
+    }
+
+    public function generateBoardingStudentsPDF(Request $request)
+    {
+        $data = $this->boardingStudentsData($request->year);
+        $pdf = PDF::loadView('backend.report.boarding-studentsPDF', compact('data'))->setPaper('a4', 'landscape');
+
+        return $pdf->download('boarding_students_' . date('d_m_Y') . '.pdf');
+    }
+
+    public function generateBoardingStudentsExcel(Request $request)
+    {
+        $data = $this->boardingStudentsData($request->year);
+        $rows = collect($data['result'])->map(function ($item) {
+            return [
+                trim(($item->first_name ?? '') . ' ' . ($item->last_name ?? '')),
+                $item->admission_no ?? '',
+                $item->year ?? '',
+                $item->class_name ?? '',
+                $item->section_name ?? '',
+                (float) ($item->school_fees_amount ?? 0),
+                (float) ($item->school_fees_paid ?? 0),
+                (float) ($item->school_fees_remained ?? 0),
+                (float) ($item->school_fees_outstanding ?? 0),
+            ];
+        })->values()->all();
+
+        $export = new class($rows) implements FromArray, WithHeadings, WithEvents {
+            protected $rows;
+
+            public function __construct(array $rows)
+            {
+                $this->rows = $rows;
+            }
+
+            public function array(): array
+            {
+                return $this->rows;
+            }
+
+            public function headings(): array
+            {
+                return ['Student', 'Admission No.', 'Year', 'Class', 'Section', 'School Fees Amount', 'Paid Amount', 'Remained Amount', 'Outstanding Balance'];
+            }
+
+            public function registerEvents(): array
+            {
+                return [
+                    AfterSheet::class => function (AfterSheet $event) {
+                        $event->sheet->getDelegate()->getStyle('A1:I1')->getFont()->setBold(true);
+                    },
+                ];
+            }
+        };
+
+        return Excel::download($export, 'Boarding_Students_Report.xlsx');
+    }
+
+    private function boardingStudentsData($year = null): array
+    {
+        $selectedYear = $year ?: date('Y');
+        $bindings = [$selectedYear];
+
+        $data['result'] = DB::select("
             SELECT 
                 students.id as student_id,
                 students.first_name,
@@ -3291,26 +3892,10 @@ $groups = $groups
                 YEAR(fees_assign_childrens.created_at) as year,
                 MAX(classes.name) as class_name,
                 MAX(sections.name) as section_name,
-                SUM(CASE 
-                    WHEN fees_groups.name = 'School Fees' 
-                    THEN fees_assign_childrens.fees_amount 
-                    ELSE 0 
-                END) as school_fees_amount,
-                SUM(CASE 
-                    WHEN fees_groups.name = 'School Fees' 
-                    THEN fees_assign_childrens.paid_amount 
-                    ELSE 0 
-                END) as school_fees_paid,
-                SUM(CASE 
-                    WHEN fees_groups.name = 'School Fees' 
-                    THEN fees_assign_childrens.remained_amount 
-                    ELSE 0 
-                END) as school_fees_remained,
-                SUM(CASE 
-                    WHEN fees_groups.name = 'School Fees' 
-                    THEN fees_assign_childrens.outstandingbalance 
-                    ELSE 0 
-                END) as school_fees_outstanding
+                SUM(CASE WHEN fees_groups.name = 'School Fees' THEN fees_assign_childrens.fees_amount ELSE 0 END) as school_fees_amount,
+                SUM(CASE WHEN fees_groups.name = 'School Fees' THEN fees_assign_childrens.paid_amount ELSE 0 END) as school_fees_paid,
+                SUM(CASE WHEN fees_groups.name = 'School Fees' THEN fees_assign_childrens.remained_amount ELSE 0 END) as school_fees_remained,
+                SUM(CASE WHEN fees_groups.name = 'School Fees' THEN fees_assign_childrens.outstandingbalance ELSE 0 END) as school_fees_outstanding
             FROM students
             INNER JOIN fees_assign_childrens ON fees_assign_childrens.student_id = students.id
             INNER JOIN fees_assigns ON fees_assigns.id = fees_assign_childrens.fees_assign_id
@@ -3323,12 +3908,9 @@ $groups = $groups
               AND fees_groups.name = 'School Fees'
               AND YEAR(fees_assign_childrens.created_at) = ?
             GROUP BY students.id, students.first_name, students.last_name, students.admission_no, YEAR(fees_assign_childrens.created_at)
-            ORDER BY students.first_name ASC, students.last_name ASC
-        ";
+            ORDER BY YEAR(fees_assign_childrens.created_at) DESC, students.first_name ASC, students.last_name ASC
+        ", $bindings);
 
-        $data['result'] = DB::select($query, [$year]);
-
-        // Get available years
         $data['years'] = DB::select("
             SELECT DISTINCT YEAR(fees_assign_childrens.created_at) as year
             FROM students
@@ -3340,13 +3922,26 @@ $groups = $groups
             ORDER BY year DESC
         ");
 
-        $data['selected_year'] = $year;
-        $data['request'] = $request;
-        
-        if ($request->expectsJson()) {
-            return response()->json(['data' => $data['result'], 'meta' => $data]);
-        }
-        return view('backend.report.boarding-students', compact('data'));
+        $data['selected_year'] = $selectedYear;
+
+        return $data;
+    }
+
+    private function boardingStudentsMeta(array $data): array
+    {
+        $year = $data['selected_year'] ?? date('Y');
+
+        return array_merge($data, [
+            'totals' => [
+                'students_count' => count($data['result'] ?? []),
+                'school_fees_amount' => collect($data['result'] ?? [])->sum('school_fees_amount'),
+                'school_fees_paid' => collect($data['result'] ?? [])->sum('school_fees_paid'),
+                'school_fees_remained' => collect($data['result'] ?? [])->sum('school_fees_remained'),
+                'school_fees_outstanding' => collect($data['result'] ?? [])->sum('school_fees_outstanding'),
+            ],
+            'pdf_download_url' => route('report-boarding-students.pdf-generate', [], false) . '?' . http_build_query(['year' => $year]),
+            'excel_download_url' => route('report-boarding-students.excel-generate', [], false) . '?' . http_build_query(['year' => $year]),
+        ]);
     }
 
     /**
@@ -3370,8 +3965,7 @@ $groups = $groups
                 'year' => $year
             ]);
             
-            // Find all boarding students with School Fees assignments for 2026
-            // Also filter by session_id = 9 (2026 session) to ensure we get the correct records
+            // Boarding students with School Fees for the active session / year filter
             $assignments = DB::select("
                 SELECT fees_assign_childrens.id,
                        fees_assign_childrens.fees_amount,
@@ -3389,8 +3983,8 @@ $groups = $groups
                 WHERE (students.category_id = 1 OR students.student_category_id = 1)
                   AND fees_groups.name = 'School Fees'
                   AND YEAR(fees_assign_childrens.created_at) = ?
-                  AND fees_assigns.session_id = 9
-            ", [$year]);
+                  AND fees_assigns.session_id = ?
+            ", [$year, setting('session')]);
             
             Log::info('Boarding School Fees Update - Found records', [
                 'year' => $year,
@@ -3472,8 +4066,8 @@ $groups = $groups
      */
     public function findMissingBoardingStudents2026(Request $request): JsonResponse|View
     {
-        // Find ALL students who had School Fees in 2025 but don't have School Fees for 2026
-        // Filter ONLY by School Fees - no boarding/day filters
+        $activeSessionId = setting('session');
+        // Students with School Fees in 2025 but no School Fees row for current session (2026 year in assign_children)
         $missingStudents = DB::select("
             SELECT DISTINCT
                 students.id as student_id,
@@ -3485,17 +4079,14 @@ $groups = $groups
                 sections_2026.name as section_2026,
                 sections_2026.id as section_id_2026
             FROM students
-            -- Check they had School Fees in 2025 (filter by fees_group name = 'School Fees' only)
             INNER JOIN fees_assign_childrens fac_2025 ON fac_2025.student_id = students.id
             INNER JOIN fees_assigns fa_2025 ON fa_2025.id = fac_2025.fees_assign_id
             INNER JOIN fees_groups fg_2025 ON fg_2025.id = fa_2025.fees_group_id
                 AND fg_2025.name = 'School Fees'
-            -- Check they have 2026 class assignment (session_id = 9 for 2026)
             INNER JOIN session_class_students scs_2026 ON scs_2026.student_id = students.id
-                AND scs_2026.session_id = 9
+                AND scs_2026.session_id = ?
             INNER JOIN classes classes_2026 ON classes_2026.id = scs_2026.classes_id
             INNER JOIN sections sections_2026 ON sections_2026.id = scs_2026.section_id
-            -- Check they DON'T have School Fees for 2026
             LEFT JOIN (
                 SELECT DISTINCT fac.student_id
                 FROM fees_assign_childrens fac
@@ -3503,12 +4094,12 @@ $groups = $groups
                 INNER JOIN fees_groups fg ON fg.id = fa.fees_group_id
                     AND fg.name = 'School Fees'
                 WHERE YEAR(fac.created_at) = 2026
-                  AND fa.session_id = 9
+                  AND fa.session_id = ?
             ) has_school_fees_2026 ON has_school_fees_2026.student_id = students.id
             WHERE YEAR(fac_2025.created_at) = 2025
               AND has_school_fees_2026.student_id IS NULL
             ORDER BY students.first_name ASC, students.last_name ASC
-        ");
+        ", [$activeSessionId, $activeSessionId]);
         
         Log::info('Missing School Fees 2026 - Query Results', [
             'total_found' => count($missingStudents),
@@ -3537,7 +4128,7 @@ $groups = $groups
             
             $newFeesAmount = 2200000.00;
             $quarterAmount = 550000.00;
-            $sessionId2026 = 9;
+            $sessionId2026 = setting('session');
             $schoolFeesGroupId = 2; // School Fees group_id is 2
             $year = 2026;
             

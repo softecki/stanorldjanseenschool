@@ -8,24 +8,27 @@ class FeesTypeUpdateRequest extends FormRequest
 {
     /**
      * Determine if the user is authorized to make this request.
-     *
-     * @return bool
      */
-    public function authorize()
+    public function authorize(): bool
     {
         return true;
     }
 
     /**
-     * Get the validation rules that apply to the request.
-     *
      * @return array<string, mixed>
      */
-    public function rules()
+    public function rules(): array
     {
+        $id = $this->route('id');
+
         return [
-            'name'      => 'required|max:255|unique:fees_types,name,'.Request()->id,
-            'status'    => 'required'
+            'name'        => 'required|max:255|unique:fees_types,name,'.$id,
+            'code'        => 'nullable|string|max:255',
+            'description' => 'nullable|string',
+            'status'      => 'required|in:0,1,2',
+            'class_id'    => 'nullable|integer|min:0',
+            'student_category_ids'   => 'nullable|array',
+            'student_category_ids.*' => 'integer|exists:student_categories,id',
         ];
     }
 }

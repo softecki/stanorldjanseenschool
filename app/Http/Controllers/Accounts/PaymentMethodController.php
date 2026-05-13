@@ -22,7 +22,7 @@ class PaymentMethodController extends Controller
         if ($request->expectsJson()) {
             return response()->json(['data' => $data['methods'], 'meta' => ['title' => $data['title']]]);
         }
-        return view('backend.accounts.payment-methods.index', compact('data'));
+        return redirect()->to(url('/app/payment-methods'));
     }
 
     public function create(Request $request): JsonResponse|RedirectResponse
@@ -31,13 +31,26 @@ class PaymentMethodController extends Controller
         if ($request->expectsJson()) {
             return response()->json(['meta' => ['title' => $data['title']]]);
         }
-        return redirect()->to(url('/app/accounts/payment-methods/create'));
+        return redirect()->to(url('/app/payment-methods/create'));
+    }
+
+    public function show(Request $request, $id): JsonResponse|RedirectResponse
+    {
+        $data['title'] = __('Payment Method Details');
+        $data['method'] = $this->repo->show($id);
+        if ($request->expectsJson()) {
+            return response()->json(['data' => $data['method'], 'meta' => ['title' => $data['title']]]);
+        }
+
+        return redirect()->to(url('/app/payment-methods/'.$id));
     }
 
     public function store(Request $request): JsonResponse|RedirectResponse
     {
         $request->validate([
             'name' => 'required|string|max:255',
+            'description' => 'nullable|string|max:1000',
+            'is_active' => 'nullable|boolean',
         ]);
         $result = $this->repo->store($request);
         if ($result['status']) {
@@ -59,13 +72,15 @@ class PaymentMethodController extends Controller
         if ($request->expectsJson()) {
             return response()->json(['data' => $data['method'], 'meta' => ['title' => $data['title']]]);
         }
-        return redirect()->to(url('/app/accounts/payment-methods/'.$id.'/edit'));
+        return redirect()->to(url('/app/payment-methods/'.$id.'/edit'));
     }
 
     public function update(Request $request, $id): JsonResponse|RedirectResponse
     {
         $request->validate([
             'name' => 'required|string|max:255',
+            'description' => 'nullable|string|max:1000',
+            'is_active' => 'nullable|boolean',
         ]);
         $result = $this->repo->update($request, $id);
         if ($result['status']) {

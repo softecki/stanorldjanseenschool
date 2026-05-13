@@ -10,7 +10,7 @@ export function TransactionFormPage({ Layout }) {
             loadEndpoint="/transactions"
             storeEndpoint="/transactions/store"
             updateEndpoint="/transactions/update"
-            backTo="/accounts/transactions"
+            backTo="/account-transactions"
         />
     );
 }

@@ -1,12 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 
 import { Shell } from '../../ReligionModuleShared';
+import { paginateState } from '../../../communication/CommunicationModuleShared';
 import { xhrJson } from '../../../api/xhrJson';
 import {
     UiActionGroup,
     UiButtonLink,
     UiHeadRow,
+    UiPager,
     UiTable,
     UiTableEmptyRow,
     UiTableWrap,
@@ -17,35 +19,66 @@ import {
     UiTR,
 } from '../../../ui/UiKit';
 
+function formatErr(ex) {
+    const d = ex.response?.data;
+    if (!d) return ex.message || 'Request failed.';
+    if (typeof d.message === 'string') return d.message;
+    if (d.errors && typeof d.errors === 'object') {
+        return Object.entries(d.errors)
+            .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(' ') : v}`)
+            .join(' · ');
+    }
+    return 'Request failed.';
+}
+
 export function ReligionsListPage({ Layout }) {
     const [rows, setRows] = useState([]);
     const [meta, setMeta] = useState({});
     const [err, setErr] = useState('');
+    const [page, setPage] = useState(1);
+    const [lastPage, setLastPage] = useState(1);
+    const [deletingId, setDeletingId] = useState(null);
 
-    const load = () =>
-        axios
-            .get('/religions', { headers: xhrJson })
+    const load = useCallback((p = 1) => {
+        setErr('');
+        return axios
+            .get('/religions', { headers: xhrJson, params: { page: p } })
             .then((r) => {
-                setRows(r.data?.data?.data || r.data?.data || []);
+                const st = paginateState(r);
+                setRows(st.rows);
+                setPage(st.page);
+                setLastPage(st.lastPage);
                 setMeta(r.data?.meta || {});
             })
-            .catch((ex) => setErr(ex.response?.data?.message || 'Failed to load religions.'));
+            .catch((ex) => setErr(formatErr(ex)));
+    }, []);
 
     useEffect(() => {
-        load();
-    }, []);
+        load(1);
+    }, [load]);
 
     const remove = async (id) => {
         if (!window.confirm('Delete this religion?')) return;
-        await axios.delete(`/religions/delete/${id}`, { headers: xhrJson });
-        load();
+        setErr('');
+        setDeletingId(id);
+        try {
+            await axios.delete(`/religions/delete/${id}`, { headers: xhrJson });
+            await load(page);
+        } catch (ex) {
+            setErr(formatErr(ex));
+        } finally {
+            setDeletingId(null);
+        }
     };
 
     return (
         <Shell Layout={Layout}>
-            <div className="flex items-center justify-between">
-                <h1 className="text-2xl font-semibold text-gray-900">{meta.title || 'Religions'}</h1>
-                <UiButtonLink to="/settings/religions/create">Create</UiButtonLink>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <h1 className="text-2xl font-semibold text-gray-900">{meta.title || 'Religions'}</h1>
+                    <p className="text-sm text-gray-500">Settings reference data.</p>
+                </div>
+                <UiButtonLink to="/settings/religions/create">Add religion</UiButtonLink>
             </div>
             {err ? <p className="text-sm text-red-600">{err}</p> : null}
             <UiTableWrap>
@@ -53,6 +86,7 @@ export function ReligionsListPage({ Layout }) {
                     <UiTHead>
                         <UiHeadRow>
                             <UiTH>Name</UiTH>
+                            <UiTH>Status</UiTH>
                             <UiTH className="text-right">Actions</UiTH>
                         </UiHeadRow>
                     </UiTHead>
@@ -60,22 +94,25 @@ export function ReligionsListPage({ Layout }) {
                         {rows.length ? (
                             rows.map((row) => (
                                 <UiTR key={row.id}>
-                                    <UiTD>{row.name}</UiTD>
+                                    <UiTD className="font-medium">{row.name}</UiTD>
+                                    <UiTD>{row.status ? 'Active' : 'Inactive'}</UiTD>
                                     <UiTD className="text-right">
                                         <UiActionGroup
                                             editTo={`/settings/religions/${row.id}/edit`}
                                             translateTo={`/settings/religions/${row.id}/translate`}
                                             onDelete={() => remove(row.id)}
+                                            busy={deletingId === row.id}
                                         />
                                     </UiTD>
                                 </UiTR>
                             ))
                         ) : (
-                            <UiTableEmptyRow colSpan={2} message="No religions found." />
+                            <UiTableEmptyRow colSpan={3} message="No religions yet." />
                         )}
                     </UiTBody>
                 </UiTable>
             </UiTableWrap>
+            <UiPager page={page} lastPage={lastPage} onPrev={() => load(page - 1)} onNext={() => load(page + 1)} />
         </Shell>
     );
 }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\SmsMailLog;
 
+use App\Enums\TemplateType;
 use App\Enums\UserType;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -49,6 +50,9 @@ class SmsMailLogStoreRequest extends FormRequest
 
         if($this->user_type == UserType::ROLE) {
             $role_ids         = "required";
+            if ($this->type == TemplateType::SMS && $this->hasFile('excel_file')) {
+                $role_ids = 'nullable';
+            }
         } elseif($this->user_type == UserType::INDIVIDUAL) {
             $role             = "required";
             $users            = "required";

@@ -92,19 +92,35 @@ class RoleController extends Controller
         return redirect()->route('roles.index')->with('danger', ___('alert.something_went_wrong_please_try_again'));
     }
 
-    public function delete($id)
+    public function delete(Request $request, $id)
     {
-        if($this->role->destroy($id)):
+        $ok = $this->role->destroy($id);
+
+        if ($request->expectsJson()) {
+            if ($ok) {
+                return response()->json([
+                    'success' => true,
+                    'message' => ___('alert.deleted_successfully'),
+                ]);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => ___('alert.something_went_wrong_please_try_again'),
+            ], 422);
+        }
+
+        if ($ok) {
             $success[0] = ___('alert.deleted_successfully');
             $success[1] = 'success';
             $success[2] = ___('alert.deleted');
             $success[3] = ___('alert.OK');
-            return response()->json($success);
-        else:
+        } else {
             $success[0] = ___('alert.something_went_wrong_please_try_again');
             $success[1] = 'error';
             $success[2] = ___('alert.oops');
-            return response()->json($success);
-        endif;      
+        }
+
+        return response()->json($success);
     }
 }

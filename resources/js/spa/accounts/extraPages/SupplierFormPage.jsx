@@ -10,7 +10,7 @@ export function SupplierFormPage({ Layout }) {
             loadEndpoint="/suppliers"
             storeEndpoint="/suppliers/store"
             updateEndpoint="/suppliers/update"
-            backTo="/accounts/suppliers"
+            backTo="/suppliers"
         />
     );
 }

@@ -31,7 +31,7 @@ class SectionController extends Controller
     public function index(Request $request): JsonResponse|View
     {
         $data['section'] = $this->section->getAll();
-        $data['title'] = ___('academic.section');
+        $data['title'] = '';
         if ($request->expectsJson()) return response()->json(['data' => $data['section'], 'meta' => ['title' => $data['title']]]);
         return view('backend.academic.section.index', compact('data'));
     }
@@ -40,7 +40,7 @@ class SectionController extends Controller
     {
         $data['title']       = ___('academic.create_section');
         if ($request->expectsJson()) return response()->json(['meta' => ['title' => $data['title']]]);
-        return redirect()->to(url('/app/academic/sections/create'));
+        return redirect()->to(spa_url('sections/create'));
     }
 
     public function store(SectionStoreRequest $request): JsonResponse|RedirectResponse
@@ -59,7 +59,7 @@ class SectionController extends Controller
         $data['section']        = $this->section->show($id);
         $data['title']       = ___('academic.edit_section');
         if ($request->expectsJson()) return response()->json(['data' => $data['section'], 'meta' => ['title' => $data['title']]]);
-        return redirect()->to(url('/app/academic/sections/'.$id.'/edit'));
+        return redirect()->to(spa_url('sections/'.$id.'/edit'));
     }
 
     public function update(SectionUpdateRequest $request, $id): JsonResponse|RedirectResponse
@@ -98,7 +98,7 @@ class SectionController extends Controller
         $data['languages']      = $this->lang_repo->all();
         $data['title']       = ___('academic.edit_section');
         if ($request->expectsJson()) return response()->json(['data' => $data['section'], 'meta' => $data]);
-        return redirect()->to(url('/app/academic/sections/'.$id.'/edit'));
+        return redirect()->to(spa_url('sections/'.$id.'/edit'));
     }
 
     public function translateUpdate(Request $request, $id): JsonResponse|RedirectResponse{

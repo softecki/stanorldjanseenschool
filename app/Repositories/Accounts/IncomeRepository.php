@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 use App\Interfaces\Accounts\IncomeInterface;
 use App\Models\FloatBalance;
 use App\Services\Accounts\BankAccountBalanceService;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Schema;
 
 class IncomeRepository implements IncomeInterface
@@ -30,7 +31,12 @@ class IncomeRepository implements IncomeInterface
 
     public function getAll()
     {
-        return $this->income->latest()->where('session_id', setting('session'))->paginate(Settings::PAGINATE);
+        return $this->income
+            ->with(['head', 'bankAccount'])
+            ->latest()
+            ->where('session_id', setting('session'))
+            ->whereNull('fees_collect_id')
+            ->paginate(Settings::PAGINATE);
     }
 
     public function store($request)
@@ -41,7 +47,7 @@ class IncomeRepository implements IncomeInterface
             $incomeStore->session_id       = setting('session'); 
             $incomeStore->name             = $request->name;
             $incomeStore->income_head      = $request->income_head;
-            $incomeStore->date             = $request->date;
+            $incomeStore->date             = $request->date ?: Carbon::now()->toDateString();
             $incomeStore->amount           = $request->amount;
             $incomeStore->bank_name             = $request->bank_name ?? null;
             $incomeStore->account_number        = $request->account_number ?? null;
@@ -83,18 +89,29 @@ class IncomeRepository implements IncomeInterface
 
     public function show($id)
     {
-        return  DB::select('select * from incomes where id = ?',[$id])[0];
+        return $this->income
+            ->with(['head', 'bankAccount'])
+            ->where('session_id', setting('session'))
+            ->whereNull('fees_collect_id')
+            ->findOrFail($id);
     }
 
     public function update($request, $id)
     {
         DB::beginTransaction();
         try {
-            $incomeUpdate                   = $this->income->findOrfail($id);
+            $incomeUpdate = $this->income
+                ->where('session_id', setting('session'))
+                ->whereNull('fees_collect_id')
+                ->findOrFail($id);
+            $previousBankAccountId = Schema::hasColumn('incomes', 'bank_account_id')
+                ? ($incomeUpdate->bank_account_id ? (int) $incomeUpdate->bank_account_id : null)
+                : null;
+            $previousAmount = (float) $incomeUpdate->amount;
             $incomeUpdate->session_id       = setting('session'); 
             $incomeUpdate->name             = $request->name;
             $incomeUpdate->income_head      = $request->income_head;
-            $incomeUpdate->date             = $request->date;
+            $incomeUpdate->date             = $request->date ?: Carbon::now()->toDateString();
             $incomeUpdate->amount           = $request->amount;
             $incomeUpdate->bank_name             = $request->bank_name ?? null;
             $incomeUpdate->account_number        = $request->account_number ?? null;
@@ -105,6 +122,17 @@ class IncomeRepository implements IncomeInterface
             $incomeUpdate->upload_id        = $this->UploadImageUpdate($request->document, 'backend/uploads/incomes', $incomeUpdate->upload_id);
             $incomeUpdate->description      = $request->description;
             $incomeUpdate->save();
+
+            if ($previousBankAccountId && $previousAmount > 0) {
+                BankAccountBalanceService::reverseCredit($previousBankAccountId, $previousAmount);
+            }
+
+            $bankAccountId = Schema::hasColumn('incomes', 'bank_account_id') && $incomeUpdate->bank_account_id
+                ? (int) $incomeUpdate->bank_account_id
+                : null;
+            if ($bankAccountId && $incomeUpdate->amount > 0) {
+                BankAccountBalanceService::credit($bankAccountId, (float) $incomeUpdate->amount);
+            }
 
             DB::commit();
             return $this->responseWithSuccess(___('alert.updated_successfully'), []);
@@ -118,9 +146,24 @@ class IncomeRepository implements IncomeInterface
     {
         DB::beginTransaction();
         try {
-            $incomeDestroy = $this->income->find($id);
+            $incomeDestroy = $this->income
+                ->where('session_id', setting('session'))
+                ->whereNull('fees_collect_id')
+                ->find($id);
+            if (!$incomeDestroy) {
+                DB::rollBack();
+                return $this->responseWithError(___('alert.something_went_wrong_please_try_again'), []);
+            }
+            $bankAccountId = Schema::hasColumn('incomes', 'bank_account_id') && $incomeDestroy->bank_account_id
+                ? (int) $incomeDestroy->bank_account_id
+                : null;
+            $amount = (float) $incomeDestroy->amount;
             $this->UploadImageDelete($incomeDestroy->upload_id);
             $incomeDestroy->delete();
+
+            if ($bankAccountId && $amount > 0) {
+                BankAccountBalanceService::reverseCredit($bankAccountId, $amount);
+            }
 
             DB::commit();
             return $this->responseWithSuccess(___('alert.deleted_successfully'), []);

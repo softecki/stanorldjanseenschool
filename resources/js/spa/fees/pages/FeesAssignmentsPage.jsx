@@ -1,27 +1,61 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import axios from 'axios';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { xhrJson } from '../../api/xhrJson';
-import {
-    ActionButtons,
-    EntityListPage,
-    EntityViewPage,
-    FeesEntityFormPage,
-    FullPageLoader,
-    TransactionsListPage,
-    normalizeFeesTransactionRows,
-    optionLabel,
-    panelTitle,
-    statusChoices,
-    studentsTableClass,
-} from '../FeesModuleShared';
+import React from 'react';
+import { EntityListPage } from '../FeesModuleShared';
 
-export function FeesAssignmentsPage({ Layout }) {
-    return <EntityListPage Layout={Layout} title="Fees Assignments" endpoint="/fees-assign" baseRoute="/fees/assignments" createRoute="/fees/assignments/create" deleteEndpoint="/fees-assign/delete" columns={[
-        { key: 'fees_group', label: 'Fees Group', render: (r) => r?.group?.name || r?.fees_group?.name || '-' },
-        { key: 'class', label: 'Class', render: (r) => r?.class?.name || '-' },
-        { key: 'session', label: 'Session', render: (r) => r?.session?.name || '-' },
-        { key: 'status', label: 'Status', render: (r) => Number(r?.status) === 1 ? 'Active' : 'Inactive' },
-    ]} />;
+function pickName(obj) {
+    if (obj == null) return null;
+    if (typeof obj === 'string') {
+        const t = obj.trim();
+        return t.length ? t : null;
+    }
+    if (typeof obj === 'object' && !Array.isArray(obj)) {
+        const n = obj.name ?? obj.title;
+        if (typeof n === 'string' && n.trim()) return n.trim();
+    }
+    return null;
 }
 
+export function FeesAssignmentsPage({ Layout }) {
+    return (
+        <EntityListPage
+            Layout={Layout}
+            variant="corporate"
+            title="Fees Assignments"
+            createButtonLabel="New assignment"
+            hideEyebrow
+            hideTitle
+            ignoreMetaTitle
+            entityLabel="assignments"
+            endpoint="/fees-assign"
+            baseRoute="/assignments"
+            createRoute="/assignments/create"
+            deleteEndpoint="/fees-assign/delete"
+            columns={[
+                {
+                    key: 'fees_group',
+                    label: 'Fees group',
+                    thClassName: 'min-w-[10rem]',
+                    tdClassName: 'font-medium text-slate-900',
+                    render: (r) => pickName(r?.group) || pickName(r?.fees_group) || '—',
+                },
+                {
+                    key: 'class',
+                    label: 'Class',
+                    thClassName: 'min-w-[8rem]',
+                    render: (r) => pickName(r?.class) || '—',
+                },
+                {
+                    key: 'section',
+                    label: 'Section',
+                    thClassName: 'w-[7rem]',
+                    render: (r) => pickName(r?.section) || '—',
+                },
+                {
+                    key: 'session',
+                    label: 'Session',
+                    thClassName: 'min-w-[8rem]',
+                    render: (r) => pickName(r?.session) || '—',
+                },
+            ]}
+        />
+    );
+}

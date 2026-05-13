@@ -1,31 +1,34 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import axios from 'axios';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import {
-    AccountCard,
-    AccountEmptyState,
-    AccountPageHeader,
-    AccountTable,
-    AccountTD,
-    AccountTH,
-    AccountTHead,
-    AccountTR,
-} from '../components/AccountUi';
-import { xhrJson } from '../../api/xhrJson';
-import {
-    AccountFullPageLoader,
-    AccountsCrudListPage,
-    AccountsHomePageComponent,
-    AccountsPageShell,
-    AccountsSectionHeader,
-    AccountsSimpleFormPage,
-    btnGhost,
-    btnPrimary,
-    extractRows,
-    inputClass,
-} from '../AccountsModuleShared';
+import React from 'react';
+import { ExpenseEntryFormPage } from './ExpenseFormPage';
+import { ExpenseRecordsPage } from './ExpenseRecordsPage';
 
 export function CashPage({ Layout }) {
-    return <AccountsDataReportPage Layout={Layout} title="Cash" endpoint="/cash/cash" />;
+    return (
+        <ExpenseRecordsPage
+            Layout={Layout}
+            title="Cash"
+            subtitle="Cash movement records with edit and delete actions."
+            endpoint="/cash/cash"
+            createTo="/cash/create"
+            editBase="/cash"
+            deleteBase="/cash/delete"
+            createLabel="Create cash entry"
+        />
+    );
+}
+
+export function CashFormPage({ Layout, edit = false }) {
+    return (
+        <ExpenseEntryFormPage
+            Layout={Layout}
+            edit={edit}
+            titleCreate="Create cash entry"
+            titleEdit="Edit cash entry"
+            loadPath="/cash"
+            storePath="/cash/store"
+            updatePath="/cash/update"
+            backTo="/cash"
+        />
+    );
 }
 

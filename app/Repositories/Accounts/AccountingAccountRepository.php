@@ -16,14 +16,45 @@ class AccountingAccountRepository
         protected AccountingAccount $model
     ) {}
 
-    public function getAll()
+    public function getAll(?\Illuminate\Http\Request $request = null)
     {
-        return $this->model->with('parent')->orderBy('type')->orderBy('name')->paginate(Settings::PAGINATE);
+        $q = $this->model->with('parent')->withCount('children');
+        if ($request !== null && $request->filled('q')) {
+            $term = trim((string) $request->q);
+            $q->where(function ($sub) use ($term) {
+                $sub->where('name', 'like', '%'.$term.'%')
+                    ->orWhere('code', 'like', '%'.$term.'%')
+                    ->orWhere('description', 'like', '%'.$term.'%');
+            });
+        }
+        if ($request !== null && $request->filled('type')) {
+            $q->where('type', (string) $request->type);
+        }
+        if ($request !== null && $request->filled('status')) {
+            $q->where('status', (int) $request->status);
+        }
+
+        return $q->orderBy('type')
+            ->orderBy('name')
+            ->paginate(Settings::PAGINATE)
+            ->appends($request?->except('page') ?? []);
     }
 
     public function getTree()
     {
-        return $this->model->active()->with('children')->whereNull('parent_id')->orderBy('type')->orderBy('name')->get();
+        $orderChildren = fn ($query) => $query->active()->orderBy('type')->orderBy('name');
+
+        return $this->model->active()
+            ->with([
+                'children' => $orderChildren,
+                'children.children' => $orderChildren,
+                'children.children.children' => $orderChildren,
+                'children.children.children.children' => $orderChildren,
+            ])
+            ->whereNull('parent_id')
+            ->orderBy('type')
+            ->orderBy('name')
+            ->get();
     }
 
     public function getForSelect(string $type = null)
@@ -86,6 +117,10 @@ class AccountingAccountRepository
         DB::beginTransaction();
         try {
             $row = $this->model->findOrFail($id);
+            if ($this->wouldCreateCycle((int) $id, $request->parent_id ? (int) $request->parent_id : null)) {
+                DB::rollBack();
+                return $this->responseWithError('Selected parent account would create an invalid account hierarchy.', []);
+            }
             $old = $row->toArray();
             $row->update([
                 'name'        => $request->name,
@@ -126,5 +161,18 @@ class AccountingAccountRepository
         $last = $this->model->where('type', $type)->orderByDesc('id')->first();
         $num = $last ? (int) filter_var($last->code ?? '0', FILTER_SANITIZE_NUMBER_INT) + 1 : 1;
         return $prefix . '-' . $num;
+    }
+
+    private function wouldCreateCycle(int $accountId, ?int $parentId): bool
+    {
+        while ($parentId) {
+            if ($parentId === $accountId) {
+                return true;
+            }
+
+            $parentId = (int) ($this->model->whereKey($parentId)->value('parent_id') ?? 0);
+        }
+
+        return false;
     }
 }

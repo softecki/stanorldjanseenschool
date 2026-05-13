@@ -14,8 +14,6 @@ use App\Models\Fees\FeesAssignChildren;
 use App\Models\Fees\FeesCollect;
 use App\Models\Fees\FeesGroup;
 use App\Models\Role;
-use App\Models\Session;
-use App\Models\Staff\Staff;
 use App\Models\StudentInfo\ParentGuardian;
 use App\Models\StudentInfo\SessionClassStudent;
 use App\Models\StudentInfo\Student;
@@ -29,10 +27,7 @@ class DashboardRepository implements DashboardInterface
     {
         $data['student'] = SessionClassStudent::join('students','students.id','=','session_class_students.student_id')->where('session_id', setting('session'))->where('status','1')->count();
         $data['parent']  = ParentGuardian::where('status',1)->count();
-        $data['teacher'] = Staff::where('role_id',5)->count();
-        $data['session'] = Session::count();
 
-        $data['events']  = Event::where('session_id', setting('session'))->active()->where('date', '>=', date('Y-m-d'))->orderBy('date')->take(5)->get();
         // Total collection = sum of amounts collected in the current session only
         $data['fees_collect'] = FeesCollect::where('session_id', setting('session'))->sum('amount');
 
@@ -55,11 +50,7 @@ $data['unpaid_amount'] = FeesAssignChildren::join('students', 'students.id', '='
                 'paid' => $this->getTotalPaid($group->id)
             ];
         }
-        $data['expense_list'] = Expense::where('session_id', setting('session'))
-            ->orderBy('id', 'desc') // or 'created_at' if you prefer
-            ->limit(5)
-            ->get();
-            $data['balance'] = $data['income'] - $data['expense'];
+        $data['balance'] = $data['income'] - $data['expense'];
 
         // Quarter-based summary per fee group (expected per quarter = fees_amount/4; remained = quater_one..quater_four; paid = total - remained; % remaining per quarter)
         $data['quarter_summary_by_group'] = $this->getQuarterSummaryByFeesGroups();

@@ -23,8 +23,10 @@ class DepartmentUpdateRequest extends FormRequest
      */
     public function rules()
     {
+        $id = $this->route('id');
+
         return [
-            'name'      => 'required|max:255|unique:departments,name,'.Request()->id,
+            'name'      => 'required|max:255|unique:departments,name,'.$id,
             'status'    => 'required'
         ];
     }

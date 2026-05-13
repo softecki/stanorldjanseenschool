@@ -8,6 +8,7 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class ChartOfAccountsController extends Controller
 {
@@ -18,11 +19,21 @@ class ChartOfAccountsController extends Controller
     public function index(Request $request): JsonResponse|View
     {
         $data['title'] = __('Chart of Accounts');
-        $data['accounts'] = $this->repo->getAll();
+        $data['accounts'] = $this->repo->getAll($request);
         if ($request->expectsJson()) {
-            return response()->json(['data' => $data['accounts'], 'meta' => ['title' => $data['title']]]);
+            return response()->json([
+                'data' => $data['accounts'],
+                'meta' => [
+                    'title' => $data['title'],
+                    'filters' => [
+                        'q' => (string) $request->input('q', ''),
+                        'type' => (string) $request->input('type', ''),
+                        'status' => (string) $request->input('status', ''),
+                    ],
+                ],
+            ]);
         }
-        return view('backend.accounts.chart-of-accounts.index', compact('data'));
+        return redirect()->to(url('/app/chart-of-accounts'));
     }
 
     public function create(Request $request): JsonResponse|RedirectResponse
@@ -32,7 +43,21 @@ class ChartOfAccountsController extends Controller
         if ($request->expectsJson()) {
             return response()->json(['meta' => ['title' => $data['title'], 'parents' => $data['parents']]]);
         }
-        return redirect()->to(url('/app/accounts/chart-of-accounts/create'));
+        return redirect()->to(url('/app/chart-of-accounts/create'));
+    }
+
+    public function show(Request $request, $id): JsonResponse|RedirectResponse
+    {
+        $data['title'] = __('Account Details');
+        $data['account'] = $this->repo->show($id)->load(['parent', 'children']);
+        if ($request->expectsJson()) {
+            return response()->json([
+                'data' => $data['account'],
+                'meta' => ['title' => $data['title']],
+            ]);
+        }
+
+        return redirect()->to(url('/app/chart-of-accounts/'.$id));
     }
 
     public function store(Request $request): JsonResponse|RedirectResponse
@@ -41,6 +66,9 @@ class ChartOfAccountsController extends Controller
             'name' => 'required|string|max:255',
             'type' => 'required|in:income,expense,asset,liability',
             'code' => 'nullable|string|max:50|unique:accounting_accounts,code',
+            'parent_id' => 'nullable|integer|exists:accounting_accounts,id',
+            'status' => 'nullable|integer|in:0,1',
+            'description' => 'nullable|string',
         ]);
         $result = $this->repo->store($request);
         if ($result['status']) {
@@ -66,7 +94,7 @@ class ChartOfAccountsController extends Controller
                 'meta' => ['title' => $data['title'], 'parents' => $data['parents']],
             ]);
         }
-        return redirect()->to(url('/app/accounts/chart-of-accounts/'.$id.'/edit'));
+        return redirect()->to(url('/app/chart-of-accounts/'.$id.'/edit'));
     }
 
     public function update(Request $request, $id): JsonResponse|RedirectResponse
@@ -74,7 +102,10 @@ class ChartOfAccountsController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'type' => 'required|in:income,expense,asset,liability',
-            'code' => 'nullable|string|max:50|unique:accounting_accounts,code,' . $id,
+            'code' => ['nullable', 'string', 'max:50', Rule::unique('accounting_accounts', 'code')->ignore($id)],
+            'parent_id' => ['nullable', 'integer', 'exists:accounting_accounts,id', Rule::notIn([(int) $id])],
+            'status' => 'nullable|integer|in:0,1',
+            'description' => 'nullable|string',
         ]);
         $result = $this->repo->update($request, $id);
         if ($result['status']) {

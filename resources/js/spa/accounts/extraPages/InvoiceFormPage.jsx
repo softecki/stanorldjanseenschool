@@ -10,7 +10,7 @@ export function InvoiceFormPage({ Layout }) {
             loadEndpoint="/invoices"
             storeEndpoint="/invoices/store"
             updateEndpoint="/invoices/update"
-            backTo="/accounts/invoices"
+            backTo="/invoices"
         />
     );
 }

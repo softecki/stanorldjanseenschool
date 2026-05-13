@@ -20,8 +20,7 @@ class Classes extends Model
     public function getClassTranAttribute()
     {
         $translation = $this->defaultTranslate()->first();
-        return $translation->name ?? $this->name;
-
+        return $translation?->name ?? $this->name;
     }
 
     public function scopeActive($query)

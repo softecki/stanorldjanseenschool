@@ -25,9 +25,17 @@ class FeesAssignUpdateRequest extends FormRequest
     public function rules()
     {
         return [
-            'fees_group'         => 'required|max:25',
-            'class'              => 'required|max:25',
-            // 'section'            => 'required|max:25'
+            'fees_group'             => 'required|max:25',
+            'class'                  => 'required|max:25',
+            'assignment_lines'       => 'nullable|array',
+            'assignment_lines.*.fees_master_id' => 'required_with:assignment_lines|integer',
+            'assignment_lines.*.student_ids'      => 'nullable|array',
+            'assignment_lines.*.student_ids.*'  => 'integer',
+            // Legacy layout (create / blades): flat student ids
+            'student_ids'                 => 'nullable|array',
+            'student_ids.*'               => 'integer',
+            'fees_master_ids'             => 'nullable|array',
+            'fees_master_ids.*'           => 'integer',
         ];
     }
 }

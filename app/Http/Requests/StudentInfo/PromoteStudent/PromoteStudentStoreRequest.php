@@ -24,9 +24,14 @@ class PromoteStudentStoreRequest extends FormRequest
     public function rules()
     {
         return [
-            'session' => 'required',
-            'class'   => 'required',
-            'section' => 'required',
+            'class'           => 'required',
+            'section'         => 'required',
+            'promote_session' => 'required',
+            'promote_class'   => 'required',
+            'promote_section' => 'required',
+            'students'        => 'required|array|min:1',
+            'result'          => 'required|array',
+            'roll'            => 'required|array',
         ];
     }
 }

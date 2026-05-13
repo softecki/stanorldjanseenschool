@@ -96,12 +96,12 @@ class SmsMailTemplateRepository implements SmsMailTemplateInterface
 
             if($request->type == TemplateType::SMS) {
 
-                $row->sms_description          = $request->descrsms_descriptioniption;
+                $row->sms_description          = $request->sms_description;
 
             } else {
 
                 $row->mail_description     = $request->mail_description;
-                $row->attachment           = $this->UploadImageCreate($request->attachment, 'backend/uploads/communication', $row->attachment);
+                $row->attachment           = $this->UploadImageUpdate($request->attachment, 'backend/uploads/communication', $row->attachment);
             }
             $row->save();
             
@@ -119,7 +119,9 @@ class SmsMailTemplateRepository implements SmsMailTemplateInterface
         try {
 
             $row = $this->model->find($id);
-            $this->UploadImageDelete($row->attachment);
+            if ($row->attachment) {
+                $this->UploadImageDelete($row->attachment);
+            }
             $row->delete();
 
             DB::commit();

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\StudentInfo\ParentGuardian;
 
+use App\Models\StudentInfo\ParentGuardian;
 use Illuminate\Foundation\Http\FormRequest;
 
 class ParentGuardianUpdateRequest extends FormRequest
@@ -23,20 +24,27 @@ class ParentGuardianUpdateRequest extends FormRequest
      */
     public function rules()
     {
+        $parentId = $this->route('id');
+        $userId = ParentGuardian::query()->whereKey($parentId)->value('user_id');
+        $phoneRule = $userId
+            ? 'required|max:255|unique:users,phone,'.$userId
+            : 'required|max:255|unique:users,phone';
+
         return [
-            'guardian_mobile'        => 'required|max:255|unique:users,phone,'.Request()->user_id,
+            'guardian_mobile'        => $phoneRule,
             'guardian_name'          => 'required|max:255',
             'status'                 => 'required|max:255',
-            'father_name'            => 'max:255',
-            'father_mobile'          => 'max:255',
-            'father_profession'      => 'max:255',
-            'mother_name'            => 'max:255',
-            'mother_mobile'          => 'max:255',
-            'mother_profession'      => 'max:255',
-            'guardian_profession'    => 'max:255',
-            'guardian_email'         => 'max:255',
-            'guardian_address'       => 'max:255',
-            'guardian_relation'      => 'max:255'
+            'father_name'            => 'nullable|max:255',
+            'father_mobile'          => 'nullable|max:255',
+            'father_profession'      => 'nullable|max:255',
+            'father_nationality'     => 'nullable|max:255',
+            'mother_name'            => 'nullable|max:255',
+            'mother_mobile'          => 'nullable|max:255',
+            'mother_profession'      => 'nullable|max:255',
+            'guardian_profession'    => 'nullable|max:255',
+            'guardian_email'         => 'nullable|email|max:255',
+            'guardian_address'       => 'nullable|max:500',
+            'guardian_relation'      => 'nullable|max:255',
         ];
     }
 }

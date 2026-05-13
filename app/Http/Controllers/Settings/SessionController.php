@@ -39,7 +39,7 @@ class SessionController extends Controller
                 'meta' => ['title' => $data['title']],
             ]);
         }
-        return redirect()->to(spa_url('sessions'));
+        return redirect()->to(spa_url('settings/sessions'));
     }
 
     public function create(Request $request): JsonResponse|RedirectResponse
@@ -48,7 +48,7 @@ class SessionController extends Controller
         if ($request->expectsJson()) {
             return response()->json(['meta' => $data]);
         }
-        return redirect()->to(spa_url('sessions/create'));
+        return redirect()->to(spa_url('settings/sessions/create'));
     }
 
     public function store(SessionStoreRequest $request): JsonResponse|RedirectResponse
@@ -73,7 +73,7 @@ class SessionController extends Controller
         if ($request->expectsJson()) {
             return response()->json(['data' => $data, 'meta' => ['title' => $data['title']]]);
         }
-        return redirect()->to(spa_url('sessions/'.$id.'/edit'));
+        return redirect()->to(spa_url('settings/sessions/'.$id.'/edit'));
     }
 
     public function update(SessionUpdateRequest $request, $id): JsonResponse|RedirectResponse
@@ -127,7 +127,7 @@ class SessionController extends Controller
         if ($request->expectsJson()) {
             return response()->json(['data' => $data, 'meta' => ['title' => $data['title']]]);
         }
-        return redirect()->to(spa_url('sessions/'.$id.'/translate'));
+        return redirect()->to(spa_url('settings/sessions/'.$id.'/translate'));
     }
 
     public function translateUpdate(Request $request, $id): JsonResponse|RedirectResponse{

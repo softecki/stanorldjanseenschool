@@ -26,8 +26,8 @@ class ExpenseStoreRequest extends FormRequest
         return [
             'name'           => 'required|max:255',
             'expense_head'   => 'required',
-            // 'date'           => 'required',
-            'amount'         => 'required|max:10'
+            'date'           => 'nullable|date',
+            'amount'         => 'required|numeric|min:0.01'
         ];
     }
 }

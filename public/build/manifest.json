@@ -7,7 +7,7 @@
       "_bootstrap.15ef6daa.js"
     ],
     "css": [
-      "assets/app.ac60dbf9.css"
+      "assets/app.e548b8d0.css"
     ]
   },
   "resources/js/legacy-app.js": {
@@ -19,14 +19,14 @@
     ]
   },
   "resources/js/spa/main.jsx": {
-    "file": "assets/main.0b078e70.js",
+    "file": "assets/main.96b82459.js",
     "src": "resources/js/spa/main.jsx",
     "isEntry": true,
     "imports": [
       "_bootstrap.15ef6daa.js"
     ],
     "css": [
-      "assets/main.ddb1fab7.css"
+      "assets/main.b45a119e.css"
     ]
   },
   "_bootstrap.15ef6daa.js": {
@@ -37,17 +37,17 @@
     "src": "resources/css/legacy.css",
     "isEntry": true
   },
-  "resources/css/spa.css": {
-    "file": "assets/spa.ddb1fab7.css",
-    "src": "resources/css/spa.css",
-    "isEntry": true
+  "resources/js/app.css": {
+    "file": "assets/app.e548b8d0.css",
+    "src": "resources/js/app.css"
   },
   "resources/js/spa/main.css": {
-    "file": "assets/main.ddb1fab7.css",
+    "file": "assets/main.b45a119e.css",
     "src": "resources/js/spa/main.css"
   },
-  "resources/js/app.css": {
-    "file": "assets/app.ac60dbf9.css",
-    "src": "resources/js/app.css"
+  "resources/css/spa.css": {
+    "file": "assets/spa.b45a119e.css",
+    "src": "resources/css/spa.css",
+    "isEntry": true
   }
 }

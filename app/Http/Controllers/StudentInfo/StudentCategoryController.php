@@ -43,14 +43,13 @@ class StudentCategoryController extends Controller
             return response()->json(['meta' => ['title' => $data['title']]]);
         }
 
-        return redirect()->to(url('/app/students/categories/create'));
-        
+        return redirect()->to(spa_url('categories/create'));
     }
 
     public function store(StudentCategoryStoreRequest $request): JsonResponse|RedirectResponse
     {
         $result = $this->repo->store($request);
-        if($result['status']){
+        if ($result['status'] ?? false) {
             if ($request->expectsJson()) {
                 return response()->json(['message' => $result['message']]);
             }
@@ -72,22 +71,44 @@ class StudentCategoryController extends Controller
                 'meta' => ['title' => $data['title']],
             ]);
         }
-        return redirect()->to(url('/app/students/categories/'.$id.'/edit'));
+        return redirect()->to(spa_url('categories/'.$id.'/edit'));
+    }
+
+    public function show(Request $request, $id): JsonResponse|RedirectResponse
+    {
+        $row = $this->repo->show($id);
+        if ($row === null) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Category not found.'], 404);
+            }
+            return redirect()->to(spa_url('categories'))->with('danger', 'Category not found.');
+        }
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'data' => $row,
+                'meta' => [
+                    'title' => ___('student_info.category_list'),
+                ],
+            ]);
+        }
+
+        return redirect()->to(spa_url('categories/'.$id));
     }
 
     public function update(StudentCategoryUpdateRequest $request, $id): JsonResponse|RedirectResponse
     {
         $result = $this->repo->update($request, $id);
-        if($result){
+        if ($result['status'] ?? false) {
             if ($request->expectsJson()) {
-                return response()->json(['message' => ___('alert.updated_successfully')]);
+                return response()->json(['message' => $result['message'] ?? ___('alert.updated_successfully')]);
             }
-            return redirect()->route('student_category.index')->with('success', ___('alert.updated_successfully'));
+            return redirect()->route('student_category.index')->with('success', $result['message'] ?? ___('alert.updated_successfully'));
         }
         if ($request->expectsJson()) {
-            return response()->json(['message' => ___('alert.something_went_wrong_please_try_again')], 500);
+            return response()->json(['message' => $result['message'] ?? ___('alert.something_went_wrong_please_try_again')], 422);
         }
-        return back()->with('danger', ___('alert.something_went_wrong_please_try_again'));
+        return back()->with('danger', $result['message'] ?? ___('alert.something_went_wrong_please_try_again'));
     }
 
     public function delete($id)
