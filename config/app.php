@@ -15,7 +15,7 @@ return [
     |
     */
 
-    'name' => env('APP_NAME', 'Laravel'),
+    'name' => env('APP_NAME', 'EduSoft'),
     'notification_job' => env('NOTIFICATION_JOB', 'instant'),
     'tranlate' => env('APP_TRANSLATE', 'false'),
     'verifier' => 'https://www.onesttech.com/api/verifier',

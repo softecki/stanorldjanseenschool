@@ -36,8 +36,8 @@ export function stripHtml(html) {
 
 export function defaultSchoolMeta() {
     return {
-        name: 'School',
-        tagline: 'Excellence in education & character.',
+        name: 'EduSoft',
+        tagline: 'School management by Softecki Group Company Limited.',
         phone: '',
         email: '',
         address: '',

@@ -1,5 +1,6 @@
 {
     "private": true,
+    "description": "EduSoft admin SPA (Softecki Group Company Limited)",
     "scripts": {
         "dev": "vite",
         "build": "vite build"

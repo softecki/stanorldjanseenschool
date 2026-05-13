@@ -20,7 +20,7 @@ class PublicSiteMeta
         return [
             'title' => $pageTitle,
             'school' => [
-                'name' => (string) (setting('application_name') ?: config('app.name', 'School')),
+                'name' => (string) (setting('application_name') ?: config('app.name', 'EduSoft')),
                 'tagline' => $tagline,
                 'phone' => (string) setting('phone', ''),
                 'email' => (string) setting('email', ''),

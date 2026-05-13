@@ -1,8 +1,8 @@
 {
     "name": "laravel/laravel",
     "type": "project",
-    "description": "The Laravel Framework.",
-    "keywords": ["framework", "laravel"],
+    "description": "EduSoft — school management system by Softecki Group Company Limited.",
+    "keywords": ["edusoft", "school", "laravel", "softecki"],
     "license": "MIT",
     "require": {
         "php": "^8.0.2",
